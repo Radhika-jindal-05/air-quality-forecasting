@@ -22,7 +22,7 @@ where $\mathbf{x}_t$ consists strictly of causally available information up to o
 
 > [!IMPORTANT]
 > **The Central Motivation & Deterministic Distinction:**
-> The CPCB National Air Quality Index (IND-AQI) is calculated **deterministically** from pollutant concentrations using predefined piecewise linear breakpoint equations:
+> The CPCB National Air Quality Index (IND-AQI) is calculated **deterministically** from pollutant concentrations using predefined piecewise linear breakpoint equations. For observations satisfying the CPCB pollutant-validity requirements, the overall AQI is the maximum of the available pollutant sub-indices:
 > $$\text{AQI} = \max\left(I_{\text{SO}_2}, I_{\text{NO}_2}, I_{\text{PM}_{10}}\right)$$
 > Therefore, predicting the current AQI directly from the same same-day pollutant concentrations is **not a meaningful machine-learning task**—it merely learns an existing mathematical function and produces artificially inflated $>99\%$ accuracy.
 > 
@@ -95,7 +95,7 @@ where $\mathbf{x}_t$ consists strictly of causally available information up to o
 4. **Target Construction:** Next observed AQI ($t+1$) filtered to horizons $\le 7$ days. Future gap `gap_to_next` is **never** fed to the model.
 5. **Dynamic Chronological Splitting:** 70% Train, 15% Validation, 15% Held-Out Test on sorted unique dates.
 6. **Multi-Model Benchmarking:** Naive Persistence, Linear Regression, Ridge, Random Forest, and XGBoost.
-7. **Comprehensive Evaluation & Diagnostics:** Regression, classification metrics, error breakdown by gap/category/city, and Streamlit app.
+7. **Comprehensive Evaluation & Diagnostics:** Regression metrics (headline), secondary derived classification metrics, error breakdown by gap/category/city, and Streamlit app.
 
 ---
 
@@ -124,8 +124,9 @@ $$I_p = \frac{I_{Hi} - I_{Lo}}{B_{Hi} - B_{Lo}} \times (C_p - B_{Lo}) + I_{Lo}$$
 | **Severe** | 401 – 500 | 1600+ | 400+ | 430+ |
 
 **Overall AQI Criterion:**
+For observations satisfying CPCB validity requirements (requiring valid particulate matter $RSPM$ and at least 2 total valid pollutant sub-indices), the overall AQI is the maximum of the available sub-indices:
 $$\text{AQI} = \max\left(I_{\text{SO}_2}, I_{\text{NO}_2}, I_{\text{RSPM}}\right)$$
-Requires valid particulate matter ($RSPM$) and at least 2 total valid pollutant sub-indices. Produces **277,303 valid ground-truth AQI values (90.33% coverage)**.
+Produces **277,303 valid ground-truth AQI values (90.33% coverage)**.
 
 ---
 
@@ -166,11 +167,11 @@ Implemented in [`src/feature_engineering.py`](file:///C:/RADHIKA-PROJECTS/air-qu
 
 ## 11. Evaluation Metrics
 Evaluated on the frozen, held-out chronological test set:
+- **Root Mean Squared Error (RMSE) [Headline]:** Penalizes larger forecast deviations.
 - **Mean Absolute Error (MAE):** Average magnitude of forecast errors in AQI units.
-- **Root Mean Squared Error (RMSE):** Penalizes larger forecast deviations.
 - **Coefficient of Determination ($R^2$):** Proportion of future AQI variance explained by the model.
 - **Median Absolute Error (MedAE):** Robust to heavy-tailed pollutant spikes.
-- **Derived AQI Category Classification:** Accuracy, Macro F1, and Weighted F1 when continuous forecasts are mapped to the 6 CPCB categories.
+- **Derived AQI Category Classification (Secondary):** Accuracy, Macro F1, and Weighted F1 when continuous forecasts are mapped to the 6 CPCB categories.
 
 ---
 
@@ -190,10 +191,10 @@ Evaluated on the frozen, held-out chronological test set:
 | **Random Forest Regressor** | 18.11 | 28.95 | 0.6489 | 11.27 |
 | **XGBoost Regressor (Final)** | **18.05** | **28.57** | **0.6582** | **11.40** |
 
-- **Test RMSE:** **28.57 AQI units**
+- **Headline Result:** XGBoost reduced test RMSE from **36.88 AQI units** (Persistence Baseline) to **28.57 AQI units**, improving $R^2$ from **0.4304 to 0.6582** on the held-out chronological test set.
 - **Mean Prediction Error:** **-0.65 AQI units**
 
-### Derived AQI Category Metrics (XGBoost):
+### Derived AQI Category Metrics (Secondary):
 - **Category Classification Accuracy:** **72.69%**
 - **Macro F1-Score:** **0.4372**
 - **Weighted F1-Score:** **0.7215**
