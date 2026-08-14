@@ -1,0 +1,26 @@
+# Python & Virtual Environments
+.venv/
+env/
+venv/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Jupyter Notebook Checkpoints
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
+
+# Large Raw Data Files
+data/*.csv
+!data/README.md
+
+# OS & IDE Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Streamlit Local Runtime
+.streamlit/

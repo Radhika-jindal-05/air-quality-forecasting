@@ -1,0 +1,158 @@
+{
+  "by_gap": [
+    {
+      "gap_bucket": "1 Day (Strict Daily)",
+      "Sample_Count": 31512,
+      "MAE": 20.4938784541253,
+      "Median_AE": 13.574530283610024,
+      "RMSE": 31.400883507651454
+    },
+    {
+      "gap_bucket": "2 Days",
+      "Sample_Count": 12265,
+      "MAE": 17.27986790875804,
+      "Median_AE": 10.725746154785156,
+      "RMSE": 27.810840824037314
+    },
+    {
+      "gap_bucket": "3 Days (Semi-weekly)",
+      "Sample_Count": 9203,
+      "MAE": 14.20909501833444,
+      "Median_AE": 8.71716817220053,
+      "RMSE": 22.55039589531148
+    },
+    {
+      "gap_bucket": "4-7 Days",
+      "Sample_Count": 8871,
+      "MAE": 14.39629832308251,
+      "Median_AE": 9.087364196777344,
+      "RMSE": 24.288959388930373
+    }
+  ],
+  "by_category": [
+    {
+      "category_true": "Good",
+      "Sample_Count": 11821,
+      "Percentage": 19.112059627168517,
+      "MAE": 16.715956552136802,
+      "Median_AE": 11.729434967041016
+    },
+    {
+      "category_true": "Satisfactory",
+      "Sample_Count": 25965,
+      "Percentage": 41.97991948392104,
+      "MAE": 13.881989069055713,
+      "Median_AE": 9.290489196777344
+    },
+    {
+      "category_true": "Moderate",
+      "Sample_Count": 22423,
+      "Percentage": 36.25325378732761,
+      "MAE": 19.333510774387026,
+      "Median_AE": 13.40673319498697
+    },
+    {
+      "category_true": "Poor",
+      "Sample_Count": 1412,
+      "Percentage": 2.282905692713133,
+      "MAE": 60.348395163057226,
+      "Median_AE": 51.94950866699219
+    },
+    {
+      "category_true": "Very Poor",
+      "Sample_Count": 184,
+      "Percentage": 0.29748912709576236,
+      "MAE": 141.85687392022484,
+      "Median_AE": 136.1577606201172
+    },
+    {
+      "category_true": "Severe",
+      "Sample_Count": 46,
+      "Percentage": 0.07437228177394059,
+      "MAE": 290.05352562242416,
+      "Median_AE": 275.5917205810547
+    }
+  ],
+  "by_top_cities": [
+    {
+      "location": "Agra",
+      "Test_Samples": 666,
+      "Mean_AQI": 157.35492575909242,
+      "MAE": 40.75708096860288,
+      "RMSE": 59.410238162831725,
+      "R2": 0.4392498759580039
+    },
+    {
+      "location": "Nagpur",
+      "Test_Samples": 634,
+      "Mean_AQI": 82.56696898002103,
+      "MAE": 16.26906901258274,
+      "RMSE": 21.225162999508186,
+      "R2": 0.002270006470335373
+    },
+    {
+      "location": "Kolkata",
+      "Test_Samples": 607,
+      "Mean_AQI": 108.90062040741611,
+      "MAE": 25.829022183419145,
+      "RMSE": 36.5176921368961,
+      "R2": 0.5509262451357506
+    },
+    {
+      "location": "Kota",
+      "Test_Samples": 593,
+      "Mean_AQI": 116.32813378302416,
+      "MAE": 28.5079296920459,
+      "RMSE": 37.119621995482994,
+      "R2": 0.4428696553213357
+    },
+    {
+      "location": "Jaipur",
+      "Test_Samples": 591,
+      "Mean_AQI": 140.60347339725513,
+      "MAE": 31.55968009889921,
+      "RMSE": 45.2382527082848,
+      "R2": 0.19552736852883668
+    },
+    {
+      "location": "Alwar",
+      "Test_Samples": 588,
+      "Mean_AQI": 175.85435563183106,
+      "MAE": 38.11349390268926,
+      "RMSE": 50.455803910761425,
+      "R2": 0.28748203659094884
+    },
+    {
+      "location": "Kala Amb",
+      "Test_Samples": 588,
+      "Mean_AQI": 114.48658352232992,
+      "MAE": 37.99705560743684,
+      "RMSE": 43.668346463995654,
+      "R2": -0.01776957634596643
+    },
+    {
+      "location": "Jalgaon",
+      "Test_Samples": 587,
+      "Mean_AQI": 106.93091046753739,
+      "MAE": 7.719160452183281,
+      "RMSE": 11.041949561259203,
+      "R2": 0.2341841007148543
+    },
+    {
+      "location": "Pune",
+      "Test_Samples": 580,
+      "Mean_AQI": 91.61008141762451,
+      "MAE": 20.125400373670786,
+      "RMSE": 26.07795020253465,
+      "R2": 0.5083704355729008
+    },
+    {
+      "location": "Chandigarh",
+      "Test_Samples": 574,
+      "Mean_AQI": 85.43581107239643,
+      "MAE": 20.104979497279672,
+      "RMSE": 26.09212525077811,
+      "R2": 0.14089067087498364
+    }
+  ]
+}

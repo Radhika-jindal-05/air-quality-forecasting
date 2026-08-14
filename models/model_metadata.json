@@ -1,0 +1,111 @@
+{
+  "split_info": {
+    "train_start": "2003-01-02",
+    "train_end": "2012-02-27",
+    "train_samples": 154628,
+    "val_start": "2012-02-28",
+    "val_end": "2014-01-28",
+    "val_samples": 52799,
+    "test_start": "2014-01-29",
+    "test_end": "2015-12-30",
+    "test_samples": 61851
+  },
+  "validation_metrics": {
+    "Naive (Persistence)": {
+      "MAE": 26.959431766831663,
+      "RMSE": 46.280089933507874,
+      "R2": 0.3535697320789234,
+      "MedAE": 15.0
+    },
+    "Linear Regression": {
+      "MAE": 23.442325873126002,
+      "RMSE": 37.736866172695606,
+      "R2": 0.5702014378768622,
+      "MedAE": 15.3768956217028
+    },
+    "Ridge Regression": {
+      "MAE": 23.442163203462865,
+      "RMSE": 37.73679822967852,
+      "R2": 0.5702029855297399,
+      "MedAE": 15.375825639576945
+    },
+    "Random Forest": {
+      "MAE": 23.031924281173065,
+      "RMSE": 38.249775984331734,
+      "R2": 0.558438615060835,
+      "MedAE": 14.233010621901329
+    },
+    "XGBoost Regressor": {
+      "MAE": 22.387787983776356,
+      "RMSE": 36.93650344826692,
+      "R2": 0.5882393346804735,
+      "MedAE": 13.919204711914062
+    }
+  },
+  "feature_importances": {
+    "rspm_roll_mean_7": 0.3453492820262909,
+    "aqi_roll_mean_7": 0.12765954434871674,
+    "aqi_roll_mean_3": 0.09672458469867706,
+    "rspm": 0.051909513771533966,
+    "rspm_roll_mean_3": 0.045700740069150925,
+    "aqi": 0.03941098600625992,
+    "so2_lag_3": 0.03291104733943939,
+    "aqi_lag_3": 0.029902582988142967,
+    "rspm_lag_3": 0.027999766170978546,
+    "no2_lag_2": 0.019496187567710876,
+    "no2_lag_3": 0.016056135296821594,
+    "so2_lag_2": 0.014624018222093582,
+    "so2_roll_mean_7": 0.014503981918096542,
+    "no2_roll_mean_7": 0.014414970763027668,
+    "so2": 0.010332819074392319,
+    "rspm_lag_1": 0.009737507440149784,
+    "so2_lag_1": 0.009395183995366096,
+    "aqi_lag_1": 0.009316083043813705,
+    "day_of_year": 0.008970909751951694,
+    "so2_roll_mean_3": 0.008182672783732414,
+    "no2": 0.008048624731600285,
+    "month": 0.007986500859260559,
+    "aqi_lag_2": 0.007535038981586695,
+    "rspm_lag_2": 0.0075034769251942635,
+    "no2_roll_mean_3": 0.0067148711532354355,
+    "aqi_roll_std_3": 0.006008076947182417,
+    "day_of_week": 0.005986081901937723,
+    "no2_lag_1": 0.005965521093457937,
+    "quarter": 0.005842815153300762,
+    "days_since_previous_observation": 0.0058103036135435104
+  },
+  "feature_columns": [
+    "aqi",
+    "so2",
+    "no2",
+    "rspm",
+    "days_since_previous_observation",
+    "aqi_lag_1",
+    "so2_lag_1",
+    "no2_lag_1",
+    "rspm_lag_1",
+    "aqi_lag_2",
+    "so2_lag_2",
+    "no2_lag_2",
+    "rspm_lag_2",
+    "aqi_lag_3",
+    "so2_lag_3",
+    "no2_lag_3",
+    "rspm_lag_3",
+    "aqi_roll_mean_3",
+    "so2_roll_mean_3",
+    "no2_roll_mean_3",
+    "rspm_roll_mean_3",
+    "aqi_roll_std_3",
+    "aqi_roll_mean_7",
+    "so2_roll_mean_7",
+    "no2_roll_mean_7",
+    "rspm_roll_mean_7",
+    "month",
+    "day_of_week",
+    "day_of_year",
+    "quarter"
+  ],
+  "supported_cities_count": 258,
+  "total_modeling_samples": 269278
+}
