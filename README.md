@@ -5,15 +5,23 @@ An interview-ready, methodologically rigorous machine learning project for **Nex
 ---
 
 ## 1. Overview
-Air quality management requires proactive decision-making. While the standard Air Quality Index (AQI) is computed deterministically from observed pollutant concentrations, environmental authorities and citizens need to anticipate air quality levels **before** severe pollution events occur. This project develops an end-to-end temporal forecasting system that predicts the future-period AQI ($\le 7$-day horizon) by exploiting nonlinear relationships and temporal interactions in historical pollutant measurements, multi-day lag structures, past rolling patterns, and calendar encodings.
+Air quality management requires proactive decision-making. While the standard Air Quality Index (AQI) is computed deterministically from observed pollutant concentrations, environmental authorities and citizens need to anticipate air quality levels **before** severe pollution events occur. This project develops an end-to-end temporal forecasting system that predicts the future-period AQI (within a 7-day horizon) by exploiting nonlinear relationships and temporal interactions in historical pollutant measurements, multi-day lag structures, past rolling patterns, and calendar encodings.
 
 ---
 
 ## 2. Problem Statement
 Given a time series of ambient air quality measurements for a city:
-$$\mathcal{D}_{\text{loc}} = \{(t_i, \text{SO}_{2, i}, \text{NO}_{2, i}, \text{RSPM}_i, \text{AQI}_i)\}_{i=1}^N$$
+
+$$
+\mathcal{D}_{\text{loc}} = \{(t_i, \text{SO}_{2, i}, \text{NO}_{2, i}, \text{RSPM}_i, \text{AQI}_i)\}_{i=1}^N
+$$
+
 The goal is to forecast the future Air Quality Index value $\text{AQI}_{t+1}$ at the next observation date within a maximum horizon of 7 days:
-$$\widehat{\text{AQI}}_{t+1} = f\left(\mathbf{x}_t; \Theta\right)$$
+
+$$
+\widehat{\text{AQI}}_{t+1} = f(\mathbf{x}_t; \Theta)
+$$
+
 where $\mathbf{x}_t$ consists strictly of causally available information up to observation time $t$.
 
 ---
@@ -22,9 +30,11 @@ where $\mathbf{x}_t$ consists strictly of causally available information up to o
 
 > [!IMPORTANT]
 > **The Central Motivation & Deterministic Distinction:**
-> The CPCB National Air Quality Index (IND-AQI) is calculated **deterministically** from pollutant concentrations using predefined piecewise linear breakpoint equations. For observations satisfying the CPCB pollutant-validity requirements, the overall AQI is the maximum of the available pollutant sub-indices:
-> $$\text{AQI} = \max\left(I_{\text{SO}_2}, I_{\text{NO}_2}, I_{\text{PM}_{10}}\right)$$
-> Therefore, predicting the current AQI directly from the same same-day pollutant concentrations is **not a meaningful machine-learning task**—it merely learns an existing mathematical function and produces artificially inflated $>99\%$ accuracy.
+> The CPCB National Air Quality Index (IND-AQI) is calculated **deterministically** from pollutant concentrations using predefined piecewise linear breakpoint equations. For observations satisfying CPCB validity requirements, the overall AQI is the maximum of the available pollutant sub-indices:
+> 
+> **`AQI = max(I_SO2, I_NO2, I_PM10)`**
+> 
+> Therefore, predicting the current AQI directly from the same same-day pollutant concentrations is **not a meaningful machine-learning task**—it merely learns an existing mathematical function and produces artificially inflated >99% accuracy.
 > 
 > This project instead uses the deterministic CPCB calculation to establish the **observed ground-truth AQI**, and applies machine learning to a fundamentally different problem: **forecasting the AQI of the next available observation** using current conditions, historical pollutant measurements, past rolling trends, and previous AQI values.
 
@@ -90,7 +100,7 @@ where $\mathbf{x}_t$ consists strictly of causally available information up to o
 
 ## 5. Methodology & Pipeline
 1. **Data Preprocessing:** Standardized date parsing, non-negative range sanitization, and daily city aggregation.
-2. **Deterministic Ground Truth:** Official CPCB sub-index calculations for $SO_2, NO_2,$ and $RSPM/PM_{10}$.
+2. **Deterministic Ground Truth:** Official CPCB sub-index calculations for $\text{SO}_2$, $\text{NO}_2$, and $\text{RSPM}/\text{PM}_{10}$.
 3. **Causal Feature Engineering:** Current observation at $t$, historical lags ($t-1, t-2, t-3$), past rolling history up to $t$, and `days_since_previous_observation`.
 4. **Target Construction:** Next observed AQI ($t+1$) filtered to horizons $\le 7$ days. Future gap `gap_to_next` is **never** fed to the model.
 5. **Dynamic Chronological Splitting:** 70% Train, 15% Validation, 15% Held-Out Test on sorted unique dates.
@@ -111,10 +121,13 @@ Implemented in [`src/data_preprocessing.py`](file:///C:/RADHIKA-PROJECTS/air-qua
 ## 7. AQI Calculation (CPCB Breakpoint Standard)
 Implemented in [`src/aqi_calculator.py`](file:///C:/RADHIKA-PROJECTS/air-quality-forecasting/src/aqi_calculator.py):
 Sub-indices $I_p$ are computed using the official CPCB piecewise linear interpolation:
-$$I_p = \frac{I_{Hi} - I_{Lo}}{B_{Hi} - B_{Lo}} \times (C_p - B_{Lo}) + I_{Lo}$$
 
-### CPCB Sub-Index Breakpoint Matrix ($\mu g/m^3$, 24-hr avg):
-| Category | AQI Range ($I_{Lo} - I_{Hi}$) | $\text{SO}_2$ ($B_{Lo} - B_{Hi}$) | $\text{NO}_2$ ($B_{Lo} - B_{Hi}$) | $\text{PM}_{10}$ / $\text{RSPM}$ ($B_{Lo} - B_{Hi}$) |
+$$
+I_p = \frac{I_{\text{Hi}} - I_{\text{Lo}}}{B_{\text{Hi}} - B_{\text{Lo}}} (C_p - B_{\text{Lo}}) + I_{\text{Lo}}
+$$
+
+### CPCB Sub-Index Breakpoint Matrix (µg/m³, 24-hr avg):
+| Category | AQI Range | SO₂ (µg/m³) | NO₂ (µg/m³) | PM₁₀ / RSPM (µg/m³) |
 | :--- | :--- | :--- | :--- | :--- |
 | **Good** | 0 – 50 | 0 – 40 | 0 – 40 | 0 – 50 |
 | **Satisfactory** | 51 – 100 | 41 – 80 | 41 – 80 | 51 – 100 |
@@ -124,8 +137,12 @@ $$I_p = \frac{I_{Hi} - I_{Lo}}{B_{Hi} - B_{Lo}} \times (C_p - B_{Lo}) + I_{Lo}$$
 | **Severe** | 401 – 500 | 1600+ | 400+ | 430+ |
 
 **Overall AQI Criterion:**
-For observations satisfying CPCB validity requirements (requiring valid particulate matter $RSPM$ and at least 2 total valid pollutant sub-indices), the overall AQI is the maximum of the available sub-indices:
-$$\text{AQI} = \max\left(I_{\text{SO}_2}, I_{\text{NO}_2}, I_{\text{RSPM}}\right)$$
+For observations satisfying CPCB validity requirements (requiring valid particulate matter RSPM and at least 2 total valid pollutant sub-indices), the overall AQI is the maximum of the available sub-indices:
+
+$$
+\text{AQI} = \max\left(I_{\text{SO}_2}, I_{\text{NO}_2}, I_{\text{RSPM}}\right)
+$$
+
 Produces **277,303 valid ground-truth AQI values (90.33% coverage)**.
 
 ---
@@ -137,7 +154,7 @@ Implemented in [`src/feature_engineering.py`](file:///C:/RADHIKA-PROJECTS/air-qu
 > **Verified Zero Temporal Leakage:**
 > - Input features $\mathbf{x}_t$ only use data available at observation time $t$.
 > - `target_next_aqi` and `gap_to_next` (future elapsed time to $t+1$) are **strictly excluded** from input features.
-> - The model instead receives `days_since_previous_observation` ($gap\_from\_previous$), which is causally known at time $t$.
+> - The model instead receives `days_since_previous_observation` (elapsed time from previous observation), which is causally known at time $t$.
 
 ### Feature Space (30 Features):
 1. **Current Observation ($t$):** $\text{AQI}(t), \text{SO}_2(t), \text{NO}_2(t), \text{RSPM}(t)$.
@@ -160,7 +177,7 @@ Implemented in [`src/feature_engineering.py`](file:///C:/RADHIKA-PROJECTS/air-qu
 1. **Naive Persistence Baseline:** Predicts future AQI as current AQI ($\widehat{\text{AQI}}_{t+1} = \text{AQI}_t$).
 2. **Linear Regression:** Standard least-squares multivariate linear baseline.
 3. **Ridge Regression:** L2 regularized linear model ($\alpha = 10.0$).
-4. **Random Forest Regressor:** Non-linear ensemble ($100$ trees, `max_depth=12`).
+4. **Random Forest Regressor:** Non-linear ensemble (100 trees, `max_depth=12`).
 5. **XGBoost Regressor (Primary):** Gradient-boosted decision trees (`n_estimators=300`, `max_depth=6`, `learning_rate=0.05`, `subsample=0.8`, `colsample_bytree=0.8`, early stopping on validation set).
 
 ---
@@ -183,7 +200,7 @@ Evaluated on the frozen, held-out chronological test set:
 - **Held-Out Test Set (15%):** `2014-01-29` to `2015-12-30` (61,851 samples across 253 cities)
 
 ### Frozen Held-Out Test Set Benchmark Results:
-| Model | MAE (AQI units) | RMSE (AQI units) | $R^2$ Score | MedAE (AQI units) |
+| Model | MAE (AQI) | RMSE (AQI) | R² Score | MedAE (AQI) |
 | :--- | :---: | :---: | :---: | :---: |
 | **Naive (Persistence Baseline)** | 22.00 | 36.88 | 0.4304 | 12.00 |
 | **Linear Regression** | 18.98 | 29.31 | 0.6402 | 12.72 |
@@ -204,7 +221,7 @@ Evaluated on the frozen, held-out chronological test set:
 ## 13. Granular Error Analysis & Limitations
 
 ### 1. Error by Forecast Horizon Gap
-| Observation Gap | Test Samples | MAE (AQI units) | MedAE (AQI units) | RMSE (AQI units) |
+| Observation Gap | Test Samples | MAE (AQI) | MedAE (AQI) | RMSE (AQI) |
 | :--- | :---: | :---: | :---: | :---: |
 | **1 Day (Strict Daily)** | 31,512 (50.9%) | 20.49 | 13.57 | 31.40 |
 | **2 Days** | 12,265 (19.8%) | 17.28 | 10.73 | 27.81 |
@@ -216,7 +233,7 @@ Evaluated on the frozen, held-out chronological test set:
 > The relationship between observation gap and error is non-monotonic in this dataset. This may reflect differences in monitoring frequency, city composition, pollution variability, and observation patterns across locations; therefore, the results should not be interpreted as evidence that longer forecasting horizons are inherently easier.
 
 ### 2. Error by Ground-Truth AQI Category
-| Category | Test Samples | % of Test Data | MAE (AQI units) | MedAE (AQI units) |
+| Category | Test Samples | % of Test Data | MAE (AQI) | MedAE (AQI) |
 | :--- | :---: | :---: | :---: | :---: |
 | **Good (0–50)** | 11,821 | 19.11% | 16.72 | 11.73 |
 | **Satisfactory (51–100)** | 25,965 | 41.98% | 13.88 | 9.29 |
@@ -326,7 +343,7 @@ streamlit run app.py
 ## 18. Limitations & Future Work
 1. **Extreme Event Detection:** As documented, extreme tail spikes (Very Poor / Severe representing $<0.37\%$ of data) suffer from regression-to-the-mean. Asymmetric loss functions or extreme-value modeling could improve tail capture.
 2. **Irregular Observation Gaps:** Historical NAMP manual stations operated ~2 days per week. While modeled via `days_since_previous_observation`, continuous minute/hourly forecasting requires continuous automated stations (CAAQMS).
-3. **Missing Fine Particulates ($PM_{2.5}$):** $PM_{2.5}$ was not monitored in earlier decades (97.86% missing in raw data).
+3. **Missing Fine Particulates (PM2.5):** $PM_{2.5}$ was not monitored in earlier decades (97.86% missing in raw data).
 4. **Exogenous Weather Integration:** Merging meteorological reanalysis data (wind speed/direction, boundary layer height, temperature) will significantly improve multi-day dispersion forecasting.
 
 ---
