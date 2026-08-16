@@ -94,6 +94,15 @@ def load_artifacts():
 @st.cache_data
 def load_city_historical_summary():
     """Load latest records per city for historical forecasting tab."""
+    snapshot_parquet = os.path.join("data", "city_snapshots.parquet")
+    snapshot_csv_gz = os.path.join("data", "city_snapshots.csv.gz")
+    
+    if os.path.exists(snapshot_parquet):
+        return pd.read_parquet(snapshot_parquet)
+    elif os.path.exists(snapshot_csv_gz):
+        return pd.read_csv(snapshot_csv_gz, compression="gzip")
+
+    # Fallback to raw dataset if snapshot not found
     from src.data_preprocessing import load_and_preprocess
     from src.aqi_calculator import calculate_aqi_dataframe
     from src.feature_engineering import create_forecasting_features
