@@ -217,7 +217,7 @@ def main():
             st.markdown("##### 2. Temporal & Causal Context")
             c_col1, c_col2, c_col3, c_col4 = st.columns(4)
             with c_col1:
-                in_days_prev = st.slider("Days since previous observation", min_value=1, max_value=14, value=3)
+                in_days_prev = st.slider("Days since previous observation", min_value=1, max_value=7, value=2, help="Elapsed days since the last recorded reading (typically 1 for daily, 2-3 for semi-weekly).")
             with c_col2:
                 in_month = st.selectbox("Month of Year", list(range(1, 13)), index=9)  # October
             with c_col3:
