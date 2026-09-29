@@ -5,9 +5,9 @@ This module handles:
 1. Target construction: AQI(t+1) within the same location.
 2. Horizon filtering: Retaining observation pairs with gap_to_next <= 7 days.
 3. Causal feature generation available at time t:
-   - Current observation at time t: AQI(t), SO2(t), NO2(t), RSPM(t)
+   - Current observation at time t: AQI(t), PM2.5(t), SO2(t), NO2(t), RSPM(t), WS(t), RH(t)
    - Causal observation gap: days_since_previous_observation (gap_from_previous)
-   - Historical lags: t-1, t-2, t-3 for AQI and pollutants
+   - Historical lags: t-1, t-2, t-3 for AQI and all pollutants/weather
    - Rolling historical statistics up to time t (strictly zero target lookahead)
    - Calendar/temporal features: month, day_of_week, day_of_year, quarter
 4. Dynamic chronological train / validation / test partitioning.
@@ -22,31 +22,43 @@ import pandas as pd
 FEATURE_COLUMNS = [
     # Current observation at time t
     "aqi",
+    "pm2_5",
     "so2",
     "no2",
     "rspm",
+    "ws",
+    "rh",
     # Causal elapsed time from previous observation
     "days_since_previous_observation",
     # Historical Lags (t-1, t-2, t-3)
     "aqi_lag_1",
+    "pm2_5_lag_1",
     "so2_lag_1",
     "no2_lag_1",
     "rspm_lag_1",
+    "ws_lag_1",
+    "rh_lag_1",
     "aqi_lag_2",
+    "pm2_5_lag_2",
     "so2_lag_2",
     "no2_lag_2",
     "rspm_lag_2",
     "aqi_lag_3",
+    "pm2_5_lag_3",
     "so2_lag_3",
     "no2_lag_3",
     "rspm_lag_3",
     # Rolling Historical Statistics (up to time t)
     "aqi_roll_mean_3",
+    "pm2_5_roll_mean_3",
     "so2_roll_mean_3",
     "no2_roll_mean_3",
     "rspm_roll_mean_3",
+    "ws_roll_mean_3",
+    "rh_roll_mean_3",
     "aqi_roll_std_3",
     "aqi_roll_mean_7",
+    "pm2_5_roll_mean_7",
     "so2_roll_mean_7",
     "no2_roll_mean_7",
     "rspm_roll_mean_7",
@@ -66,20 +78,13 @@ def create_forecasting_features(
 ) -> pd.DataFrame:
     """
     Generate causal features and future observation target from daily aggregated data.
-
-    Parameters:
-    -----------
-    df : pd.DataFrame
-        Daily location-aggregated DataFrame with calculated ground-truth 'aqi'.
-    max_horizon_days : int, default=7
-        Maximum allowed days to the next observation to qualify as a valid forecasting target.
-
-    Returns:
-    --------
-    pd.DataFrame
-        Feature-engineered DataFrame filtered to valid forecasting pairs.
     """
     df = df.copy()
+
+    # Ensure all required pollutant/weather columns exist
+    for col in ["pm2_5", "rspm", "so2", "no2", "ws", "rh"]:
+        if col not in df.columns:
+            df[col] = np.nan
 
     # Drop rows without valid ground truth AQI
     df = df.dropna(subset=["aqi"]).copy()
@@ -103,14 +108,14 @@ def create_forecasting_features(
     df["days_since_previous_observation"] = (df["date"] - df["prev_date"]).dt.days.fillna(7.0)
 
     # 3. Historical Lags (t-1, t-2, t-3)
-    for col in ["aqi", "so2", "no2", "rspm"]:
+    lag_cols = ["aqi", "pm2_5", "so2", "no2", "rspm", "ws", "rh"]
+    for col in lag_cols:
         df[f"{col}_lag_1"] = df[col].shift(1).where(same_loc_prev1)
         df[f"{col}_lag_2"] = df[col].shift(2).where(same_loc_prev2)
         df[f"{col}_lag_3"] = df[col].shift(3).where(same_loc_prev3)
 
-    # 4. Rolling Historical Features (using past lags up to time t: lag_1, lag_2, lag_3)
-    # Using past values strictly ensures zero target lookahead
-    for col in ["aqi", "so2", "no2", "rspm"]:
+    # 4. Rolling Historical Features (using past lags up to time t)
+    for col in lag_cols:
         lags_3 = df[[f"{col}_lag_1", f"{col}_lag_2", f"{col}_lag_3"]]
         df[f"{col}_roll_mean_3"] = lags_3.mean(axis=1)
         if col == "aqi":
@@ -150,10 +155,6 @@ def chronological_split(
 ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, Dict[str, Any]]:
     """
     Split DataFrame chronologically based on sorted unique dates.
-
-    Guarantees:
-    - Zero future data in training/validation.
-    - True held-out test evaluation on the latest chronological period.
     """
     assert np.isclose(train_ratio + val_ratio + test_ratio, 1.0), "Split ratios must sum to 1.0"
 

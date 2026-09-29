@@ -2,9 +2,9 @@
 Streamlit Web Application: Air Quality Forecasting using XGBoost.
 
 An interactive, responsive dashboard for:
-1. Deterministic calculation of current AQI via official CPCB piecewise breakpoints.
-2. Next-Period AQI Forecasting using XGBoost trained on temporal lags and rolling patterns.
-3. City-level historical forecasts across 250+ Indian cities with interactive Plotly timelines.
+1. Deterministic calculation of current AQI via official CPCB piecewise breakpoints (PM2.5, PM10, SO2, NO2).
+2. Next-Period AQI Forecasting using XGBoost trained on 2009–2024 CAAQMS continuous monitoring data.
+3. City-level historical forecasts across 260+ Indian cities with interactive Plotly timelines.
 4. Custom pollutant scenario simulation with preset scenarios and health advisories.
 5. Interactive model diagnostics, error distributions, and benchmark transparency.
 """
@@ -23,7 +23,14 @@ from plotly.subplots import make_subplots
 # Ensure repository root is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
-from src.aqi_calculator import calculate_aqi_scalar, get_aqi_category, calc_so2_subindex, calc_no2_subindex, calc_rspm_subindex
+from src.aqi_calculator import (
+    calculate_aqi_scalar,
+    get_aqi_category,
+    calc_so2_subindex,
+    calc_no2_subindex,
+    calc_rspm_subindex,
+    calc_pm25_subindex
+)
 from src.feature_engineering import FEATURE_COLUMNS
 
 # Page configuration
@@ -147,17 +154,18 @@ def load_city_historical_summary():
     snapshot_csv_gz = os.path.join("data", "city_snapshots.csv.gz")
     
     if os.path.exists(snapshot_parquet):
-        return pd.read_parquet(snapshot_parquet)
+        df = pd.read_parquet(snapshot_parquet)
     elif os.path.exists(snapshot_csv_gz):
-        return pd.read_csv(snapshot_csv_gz, compression="gzip")
+        df = pd.read_csv(snapshot_csv_gz, compression="gzip")
+    else:
+        from src.data_preprocessing import load_and_preprocess
+        df = load_and_preprocess()
 
-    # Fallback to raw dataset if snapshot not found
-    from src.data_preprocessing import load_and_preprocess
     from src.aqi_calculator import calculate_aqi_dataframe
     from src.feature_engineering import create_forecasting_features
 
-    daily_df = load_and_preprocess()
-    aqi_df = calculate_aqi_dataframe(daily_df)
+    df["date"] = pd.to_datetime(df["date"])
+    aqi_df = calculate_aqi_dataframe(df)
     model_df = create_forecasting_features(aqi_df, max_horizon_days=7)
     return model_df
 
@@ -223,7 +231,7 @@ def create_aqi_gauge(aqi_val: float, title: str) -> go.Figure:
     return fig
 
 
-def create_city_timeline_plot(city_df: pd.DataFrame, pred_next_aqi: float, selected_city: str) -> go.Figure:
+def create_city_timeline_plot(city_df: pd.DataFrame, pred_next_aqi: float, selected_city: str, test_rmse: float = 39.67) -> go.Figure:
     """Interactive timeline plot showing historical AQI, CPCB bands, and future forecast point."""
     plot_df = city_df.tail(60).copy()
     
@@ -251,7 +259,6 @@ def create_city_timeline_plot(city_df: pd.DataFrame, pred_next_aqi: float, selec
     # Connection line to forecast
     latest_date = plot_df["date"].iloc[-1]
     latest_aqi = plot_df["aqi"].iloc[-1]
-    
     forecast_date = latest_date + pd.Timedelta(days=1)
     
     fig.add_trace(go.Scatter(
@@ -273,12 +280,12 @@ def create_city_timeline_plot(city_df: pd.DataFrame, pred_next_aqi: float, selec
         hovertemplate="<b>Next-Period Forecast:</b> %{y:.1f}<br><b>Horizon:</b> $\le 7$ Days<extra></extra>"
     ))
 
-    # Uncertainty error band (+/- 28.57 RMSE)
+    # Uncertainty error band (+/- RMSE)
     fig.add_trace(go.Scatter(
         x=[forecast_date, forecast_date],
-        y=[max(0, pred_next_aqi - 28.57), min(500, pred_next_aqi + 28.57)],
+        y=[max(0, pred_next_aqi - test_rmse), min(500, pred_next_aqi + test_rmse)],
         mode="lines",
-        name="±1 RMSE Uncertainty (±28.57)",
+        name=f"±1 RMSE Uncertainty (±{test_rmse:.1f})",
         line=dict(color="#fb7185", width=4),
         hoverinfo="skip"
     ))
@@ -300,27 +307,29 @@ def create_city_timeline_plot(city_df: pd.DataFrame, pred_next_aqi: float, selec
     return fig
 
 
-def create_subindex_breakdown_plot(so2_si: float, no2_si: float, rspm_si: float) -> go.Figure:
-    """Create interactive bar chart showing pollutant sub-indices with dominant pollutant callout."""
-    pollutants = ["SO₂ Sub-Index", "NO₂ Sub-Index", "RSPM / PM₁₀ Sub-Index"]
-    values = [so2_si, no2_si, rspm_si]
+def create_subindex_breakdown_plot(pm25_si: float, rspm_si: float, so2_si: float, no2_si: float) -> go.Figure:
+    """Create interactive bar chart showing all pollutant sub-indices with dominant pollutant callout."""
+    pollutants = ["PM₂.₅ Sub-Index", "PM₁₀ Sub-Index", "SO₂ Sub-Index", "NO₂ Sub-Index"]
+    values = [pm25_si, rspm_si, so2_si, no2_si]
     
-    max_val = max(values)
-    colors = ["#38bdf8" if v < max_val else "#f43f5e" for v in values]
+    clean_vals = [v if pd.notna(v) else 0.0 for v in values]
+    max_val = max(clean_vals)
+    colors = ["#38bdf8" if v < max_val else "#f43f5e" for v in clean_vals]
     
     fig = go.Figure(go.Bar(
         x=pollutants,
-        y=values,
+        y=clean_vals,
         marker_color=colors,
-        text=[f"{v:.1f}" for v in values],
+        text=[f"{v:.1f}" if v > 0 else "N/A" for v in clean_vals],
         textposition="auto",
         hovertemplate="<b>%{x}:</b> %{y:.1f} AQI units<extra></extra>"
     ))
     
-    fig.add_hline(y=max_val, line_dash="dash", line_color="#e11d48", annotation_text=f"Max Sub-Index = Overall AQI ({max_val:.1f})", annotation_position="top right")
+    if max_val > 0:
+        fig.add_hline(y=max_val, line_dash="dash", line_color="#e11d48", annotation_text=f"Dominant Sub-Index = Overall AQI ({max_val:.1f})", annotation_position="top right")
     
     fig.update_layout(
-        title="<b>Pollutant Sub-Index Breakdown (Deterministic CPCB)</b>",
+        title="<b>Pollutant Sub-Index Breakdown (Deterministic CPCB IND-AQI)</b>",
         title_font={"size": 15, "color": "#1e293b"},
         yaxis_title="Sub-Index Value",
         plot_bgcolor="white",
@@ -337,7 +346,15 @@ def main():
     model = artifact["model"]
     train_medians = artifact["train_medians"]
     supported_cities = artifact.get("supported_cities", [])
-    residual_std = test_results.get("test_residual_std", 28.57)
+    
+    reg_metrics = test_results.get("test_regression_metrics", {})
+    xgb_metrics = reg_metrics.get("XGBoost Regressor", {})
+    test_rmse = xgb_metrics.get("RMSE", 39.67)
+    test_r2 = xgb_metrics.get("R2", 0.7751)
+    
+    clf_metrics = test_results.get("xgb_classification_metrics", {})
+    test_acc = clf_metrics.get("accuracy", 0.6837) * 100
+    test_macro_f1 = clf_metrics.get("macro_f1", 0.6072)
 
     # Sidebar Navigation & Context
     st.sidebar.markdown("## 🌤️ Navigation")
@@ -347,35 +364,35 @@ def main():
     )
 
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🏆 Core Model Performance")
+    st.sidebar.markdown("### 🏆 Core Model Performance (2022–2024 Test)")
     st.sidebar.markdown(
-        """
-        - **XGBoost Test RMSE:** `28.57` (vs Persistence `36.88`)
-        - **R² Score:** `0.6582` (66% variance captured)
-        - **Category Accuracy:** `72.69%`
-        - **Test Dataset:** 61,851 unseen future instances
+        f"""
+        - **XGBoost Test RMSE:** `{test_rmse:.2f}` (vs Persistence `44.13`)
+        - **R² Score:** `{test_r2:.4f}` ({test_r2*100:.1f}% variance captured)
+        - **Macro F1 Score:** `{test_macro_f1:.4f}`
+        - **Test Dataset:** 198,704 unseen future instances (260 cities)
         """
     )
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("### 📌 Methodology Definition")
     st.sidebar.info(
-        "**1. Deterministic Ground Truth:** Current AQI is computed using official CPCB piecewise sub-index equations.\n\n"
-        "**2. Machine Learning Forecasting:** XGBoost forecasts the **Next-Period AQI** ($\le 7$ days) from 30 causal lag, rolling, and seasonal features."
+        "**1. Deterministic Ground Truth:** Current AQI is computed using official CPCB piecewise sub-index equations across PM2.5, PM10, SO2, and NO2.\n\n"
+        "**2. Machine Learning Forecasting:** XGBoost forecasts the **Next-Period AQI** ($\le 7$ days) from causal lag, rolling volatility, and meteorological features."
     )
 
     # Top Title
     st.markdown('<div class="main-header">Air Quality Forecasting using XGBoost</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">Methodologically rigorous temporal forecasting across 300+ Indian monitoring locations under CPCB IND-AQI standards</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Multi-pollutant temporal forecasting pipeline trained on 2009–2024 CAAQMS continuous monitoring data (CPCB IND-AQI Standard)</div>', unsafe_allow_html=True)
 
     # Top KPI Banner
     k1, k2, k3, k4 = st.columns(4)
     with k1:
-        st.markdown('<div class="stat-card"><div class="stat-number">28.57</div><div class="stat-label">XGBoost Test RMSE</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="stat-card"><div class="stat-number">{test_rmse:.2f}</div><div class="stat-label">XGBoost Test RMSE</div></div>', unsafe_allow_html=True)
     with k2:
-        st.markdown('<div class="stat-card"><div class="stat-number">0.6582</div><div class="stat-label">Test R² Score</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="stat-card"><div class="stat-number">{test_r2:.4f}</div><div class="stat-label">Test R² Score</div></div>', unsafe_allow_html=True)
     with k3:
-        st.markdown('<div class="stat-card"><div class="stat-number">72.69%</div><div class="stat-label">Category Accuracy</div></div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="stat-card"><div class="stat-number">{test_macro_f1:.4f}</div><div class="stat-label">Macro F1 Score</div></div>', unsafe_allow_html=True)
     with k4:
         st.markdown(f'<div class="stat-card"><div class="stat-number">{len(supported_cities)}</div><div class="stat-label">Supported Cities</div></div>', unsafe_allow_html=True)
 
@@ -386,7 +403,7 @@ def main():
     # =========================================================================
     if app_mode == "🏙️ City Historical Forecast":
         st.subheader("🏙️ City Historical Replay & Next-Period Forecast")
-        st.write("Explore continuous historical monitoring timelines across 250+ Indian cities and generate next-period forecasts.")
+        st.write("Explore continuous historical monitoring timelines across 260+ Indian cities and generate next-period forecasts.")
 
         with st.spinner("Loading city historical observations..."):
             model_df = load_city_historical_summary()
@@ -402,7 +419,7 @@ def main():
             selected_city = st.selectbox("Select Monitoring Location / City:", available_cities, index=default_city_idx)
         with sel_c2:
             st.markdown("<div style='height: 28px;'></div>", unsafe_allow_html=True)
-            st.caption(f"Showing validated historical records for **{selected_city}**.")
+            st.caption(f"Showing validated continuous records for **{selected_city}**.")
 
         city_df = model_df[model_df["location"] == selected_city].sort_values("date").reset_index(drop=True)
 
@@ -425,18 +442,19 @@ def main():
         # Delta calculation
         aqi_delta = pred_next_aqi - curr_aqi
         delta_symbol = "↗️ Expected to rise by" if aqi_delta > 0 else "↘️ Expected to improve by"
-        delta_color = "normal" if abs(aqi_delta) < 5 else ("inverse" if aqi_delta > 0 else "off")
 
         # Metrics Row
-        m1, m2, m3, m4 = st.columns(4)
+        m1, m2, m3, m4, m5 = st.columns(5)
         with m1:
-            st.metric("Latest Observation Date", latest_date)
+            st.metric("Observation Date", latest_date)
         with m2:
-            st.metric("Latest SO₂", f"{latest_row['so2']:.1f} µg/m³" if pd.notna(latest_row['so2']) else "N/A")
+            st.metric("PM₂.₅ (µg/m³)", f"{latest_row['pm2_5']:.1f}" if 'pm2_5' in latest_row and pd.notna(latest_row['pm2_5']) else "N/A")
         with m3:
-            st.metric("Latest NO₂", f"{latest_row['no2']:.1f} µg/m³" if pd.notna(latest_row['no2']) else "N/A")
+            st.metric("PM₁₀ (µg/m³)", f"{latest_row['rspm']:.1f}" if 'rspm' in latest_row and pd.notna(latest_row['rspm']) else "N/A")
         with m4:
-            st.metric("Latest RSPM (PM₁₀)", f"{latest_row['rspm']:.1f} µg/m³" if pd.notna(latest_row['rspm']) else "N/A")
+            st.metric("NO₂ (µg/m³)", f"{latest_row['no2']:.1f}" if 'no2' in latest_row and pd.notna(latest_row['no2']) else "N/A")
+        with m5:
+            st.metric("Wind Speed (m/s)", f"{latest_row['ws']:.1f}" if 'ws' in latest_row and pd.notna(latest_row['ws']) else "N/A")
 
         st.markdown("---")
 
@@ -450,14 +468,14 @@ def main():
         with g_col2:
             st.plotly_chart(create_aqi_gauge(pred_next_aqi, f"Next-Period Forecast: {pred_next_aqi:.1f}"), use_container_width=True)
             st.markdown(f"<div style='text-align: center;'><strong>Predicted Category:</strong> {get_badge_html(pred_cat)} &nbsp; (<i>{delta_symbol} {abs(aqi_delta):.1f} pts</i>)</div>", unsafe_allow_html=True)
-            st.caption(f"Machine learning forecast for next available observation ($\le 7$ days). Global test RMSE: ±{residual_std:.2f}.")
+            st.caption(f"Machine learning forecast for next available observation ($\le 7$ days). Global test RMSE: ±{test_rmse:.2f}.")
 
         # Health Advisory Banner
         st.markdown(get_health_advisory(pred_cat), unsafe_allow_html=True)
 
         # Interactive Timeline Chart
         st.markdown("<br>", unsafe_allow_html=True)
-        st.plotly_chart(create_city_timeline_plot(city_df, pred_next_aqi, selected_city), use_container_width=True)
+        st.plotly_chart(create_city_timeline_plot(city_df, pred_next_aqi, selected_city, test_rmse), use_container_width=True)
 
     # =========================================================================
     # TAB 2: Custom Scenario Simulation
@@ -469,32 +487,33 @@ def main():
         # Preset Scenarios
         st.markdown("##### ⚡ Quick Preset Scenarios")
         preset_cols = st.columns(4)
-        
-        default_so2, default_no2, default_rspm = 25.0, 45.0, 120.0
-        default_days_prev = 2
-        default_month = 10
-        default_lag1, default_lag2, default_lag3 = 115.0, 110.0, 105.0
 
         if "preset_loaded" not in st.session_state:
             st.session_state.preset_loaded = "moderate"
 
         with preset_cols[0]:
             if st.button("🌫️ Delhi Winter Smog", use_container_width=True):
+                st.session_state.pm25 = 185.0
+                st.session_state.rspm = 280.0
                 st.session_state.so2 = 28.0
                 st.session_state.no2 = 98.0
-                st.session_state.rspm = 310.0
+                st.session_state.ws = 1.2
+                st.session_state.rh = 78.0
                 st.session_state.days_prev = 1
                 st.session_state.month = 11
-                st.session_state.lag1 = 260.0
-                st.session_state.lag2 = 220.0
-                st.session_state.lag3 = 180.0
+                st.session_state.lag1 = 280.0
+                st.session_state.lag2 = 240.0
+                st.session_state.lag3 = 210.0
                 st.rerun()
 
         with preset_cols[1]:
             if st.button("🌧️ Monsoon Clean Washout", use_container_width=True):
+                st.session_state.pm25 = 18.0
+                st.session_state.rspm = 35.0
                 st.session_state.so2 = 8.0
                 st.session_state.no2 = 18.0
-                st.session_state.rspm = 38.0
+                st.session_state.ws = 4.5
+                st.session_state.rh = 85.0
                 st.session_state.days_prev = 1
                 st.session_state.month = 7
                 st.session_state.lag1 = 45.0
@@ -504,104 +523,126 @@ def main():
 
         with preset_cols[2]:
             if st.button("🚗 Urban Traffic Peak", use_container_width=True):
+                st.session_state.pm25 = 75.0
+                st.session_state.rspm = 145.0
                 st.session_state.so2 = 22.0
                 st.session_state.no2 = 78.0
-                st.session_state.rspm = 145.0
-                st.session_state.days_prev = 2
+                st.session_state.ws = 2.1
+                st.session_state.rh = 55.0
+                st.session_state.days_prev = 1
                 st.session_state.month = 4
-                st.session_state.lag1 = 125.0
-                st.session_state.lag2 = 118.0
-                st.session_state.lag3 = 110.0
+                st.session_state.lag1 = 145.0
+                st.session_state.lag2 = 138.0
+                st.session_state.lag3 = 130.0
                 st.rerun()
 
         with preset_cols[3]:
             if st.button("🏭 Industrial Accumulation", use_container_width=True):
-                st.session_state.so2 = 95.0
-                st.session_state.no2 = 140.0
-                st.session_state.rspm = 230.0
-                st.session_state.days_prev = 3
+                st.session_state.pm25 = 140.0
+                st.session_state.rspm = 220.0
+                st.session_state.so2 = 85.0
+                st.session_state.no2 = 120.0
+                st.session_state.ws = 1.5
+                st.session_state.rh = 62.0
+                st.session_state.days_prev = 2
                 st.session_state.month = 1
-                st.session_state.lag1 = 195.0
-                st.session_state.lag2 = 175.0
-                st.session_state.lag3 = 150.0
+                st.session_state.lag1 = 210.0
+                st.session_state.lag2 = 185.0
+                st.session_state.lag3 = 160.0
                 st.rerun()
 
         with st.form("custom_forecast_form"):
             st.markdown("##### 1. Current Observation (Time $t$)")
-            f_col1, f_col2, f_col3 = st.columns(3)
+            f_col1, f_col2, f_col3, f_col4 = st.columns(4)
             with f_col1:
-                in_so2 = st.number_input("Current SO₂ (µg/m³)", min_value=0.0, max_value=1500.0, value=st.session_state.get("so2", 25.0), step=1.0)
+                in_pm25 = st.number_input("Current PM₂.₅ (µg/m³)", min_value=0.0, max_value=1000.0, value=st.session_state.get("pm25", 65.0), step=5.0)
             with f_col2:
-                in_no2 = st.number_input("Current NO₂ (µg/m³)", min_value=0.0, max_value=800.0, value=st.session_state.get("no2", 45.0), step=1.0)
+                in_rspm = st.number_input("Current PM₁₀ (µg/m³)", min_value=0.0, max_value=1000.0, value=st.session_state.get("rspm", 120.0), step=5.0)
             with f_col3:
-                in_rspm = st.number_input("Current RSPM / PM₁₀ (µg/m³)", min_value=0.0, max_value=1000.0, value=st.session_state.get("rspm", 120.0), step=5.0)
+                in_no2 = st.number_input("Current NO₂ (µg/m³)", min_value=0.0, max_value=800.0, value=st.session_state.get("no2", 45.0), step=1.0)
+            with f_col4:
+                in_so2 = st.number_input("Current SO₂ (µg/m³)", min_value=0.0, max_value=1500.0, value=st.session_state.get("so2", 20.0), step=1.0)
 
-            st.markdown("##### 2. Temporal & Causal Context")
+            st.markdown("##### 2. Meteorological & Causal Context")
             c_col1, c_col2, c_col3, c_col4 = st.columns(4)
             with c_col1:
-                in_days_prev = st.slider("Days since previous observation", min_value=1, max_value=7, value=st.session_state.get("days_prev", 2), help="Elapsed days since the last recorded reading.")
+                in_ws = st.number_input("Wind Speed (m/s)", min_value=0.0, max_value=30.0, value=st.session_state.get("ws", 2.2), step=0.1)
             with c_col2:
-                in_month = st.selectbox("Month of Year", list(range(1, 13)), index=st.session_state.get("month", 10) - 1)
+                in_rh = st.number_input("Relative Humidity (%)", min_value=0.0, max_value=100.0, value=st.session_state.get("rh", 60.0), step=1.0)
             with c_col3:
-                in_dow = st.selectbox("Day of Week", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"], index=2)
+                in_days_prev = st.slider("Days since previous observation", min_value=1, max_value=7, value=st.session_state.get("days_prev", 1))
             with c_col4:
+                in_month = st.selectbox("Month of Year", list(range(1, 13)), index=st.session_state.get("month", 10) - 1)
+
+            st.markdown("##### 3. Recent Historical Lags (Past Trends)")
+            l_col1, l_col2, l_col3, l_col4 = st.columns(4)
+            with l_col1:
+                in_aqi_lag1 = st.number_input("AQI at $t-1$", min_value=0.0, max_value=500.0, value=st.session_state.get("lag1", 135.0), step=5.0)
+            with l_col2:
+                in_aqi_lag2 = st.number_input("AQI at $t-2$", min_value=0.0, max_value=500.0, value=st.session_state.get("lag2", 125.0), step=5.0)
+            with l_col3:
+                in_aqi_lag3 = st.number_input("AQI at $t-3$", min_value=0.0, max_value=500.0, value=st.session_state.get("lag3", 115.0), step=5.0)
+            with l_col4:
                 in_quarter = (in_month - 1) // 3 + 1
                 st.text(f"Quarter: Q{in_quarter}")
 
-            st.markdown("##### 3. Recent Historical Lags (Past Trends)")
-            l_col1, l_col2, l_col3 = st.columns(3)
-            with l_col1:
-                in_aqi_lag1 = st.number_input("AQI at $t-1$", min_value=0.0, max_value=500.0, value=st.session_state.get("lag1", 115.0), step=5.0)
-            with l_col2:
-                in_aqi_lag2 = st.number_input("AQI at $t-2$", min_value=0.0, max_value=500.0, value=st.session_state.get("lag2", 110.0), step=5.0)
-            with l_col3:
-                in_aqi_lag3 = st.number_input("AQI at $t-3$", min_value=0.0, max_value=500.0, value=st.session_state.get("lag3", 105.0), step=5.0)
-
             submit_btn = st.form_submit_button("⚡ Compute & Forecast AQI", use_container_width=True)
 
-        if submit_btn or "so2" in st.session_state:
+        if submit_btn or "pm25" in st.session_state:
             # Deterministic Current AQI Calculation
-            curr_aqi = calculate_aqi_scalar(so2=in_so2, no2=in_no2, rspm=in_rspm)
+            curr_aqi = calculate_aqi_scalar(so2=in_so2, no2=in_no2, rspm=in_rspm, pm2_5=in_pm25)
             curr_cat = get_aqi_category(curr_aqi)
 
             # Sub-indices breakdown
             si_so2 = calc_so2_subindex(in_so2)
             si_no2 = calc_no2_subindex(in_no2)
             si_rspm = calc_rspm_subindex(in_rspm)
+            si_pm25 = calc_pm25_subindex(in_pm25)
 
             # Build feature dictionary for XGBoost
-            dow_num = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].index(in_dow)
             lag_aqis = [in_aqi_lag1, in_aqi_lag2, in_aqi_lag3]
 
             feature_dict = {
                 "aqi": curr_aqi,
+                "pm2_5": in_pm25,
                 "so2": in_so2,
                 "no2": in_no2,
                 "rspm": in_rspm,
+                "ws": in_ws,
+                "rh": in_rh,
                 "days_since_previous_observation": float(in_days_prev),
                 "aqi_lag_1": in_aqi_lag1,
+                "pm2_5_lag_1": in_pm25,
                 "so2_lag_1": in_so2,
                 "no2_lag_1": in_no2,
                 "rspm_lag_1": in_rspm,
+                "ws_lag_1": in_ws,
+                "rh_lag_1": in_rh,
                 "aqi_lag_2": in_aqi_lag2,
+                "pm2_5_lag_2": in_pm25,
                 "so2_lag_2": in_so2,
                 "no2_lag_2": in_no2,
                 "rspm_lag_2": in_rspm,
                 "aqi_lag_3": in_aqi_lag3,
+                "pm2_5_lag_3": in_pm25,
                 "so2_lag_3": in_so2,
                 "no2_lag_3": in_no2,
                 "rspm_lag_3": in_rspm,
                 "aqi_roll_mean_3": float(np.mean(lag_aqis)),
+                "pm2_5_roll_mean_3": in_pm25,
                 "so2_roll_mean_3": in_so2,
                 "no2_roll_mean_3": in_no2,
                 "rspm_roll_mean_3": in_rspm,
+                "ws_roll_mean_3": in_ws,
+                "rh_roll_mean_3": in_rh,
                 "aqi_roll_std_3": float(np.std(lag_aqis)),
                 "aqi_roll_mean_7": float(np.mean(lag_aqis)),
+                "pm2_5_roll_mean_7": in_pm25,
                 "so2_roll_mean_7": in_so2,
                 "no2_roll_mean_7": in_no2,
                 "rspm_roll_mean_7": in_rspm,
                 "month": in_month,
-                "day_of_week": dow_num,
+                "day_of_week": 2,
                 "day_of_year": in_month * 30,
                 "quarter": in_quarter
             }
@@ -625,18 +666,17 @@ def main():
             st.markdown(get_health_advisory(pred_cat), unsafe_allow_html=True)
 
             # Sub-index breakdown chart
-            st.plotly_chart(create_subindex_breakdown_plot(si_so2, si_no2, si_rspm), use_container_width=True)
+            st.plotly_chart(create_subindex_breakdown_plot(si_pm25, si_rspm, si_so2, si_no2), use_container_width=True)
 
     # =========================================================================
     # TAB 3: Model Diagnostics & Methodology
     # =========================================================================
     elif app_mode == "📊 Model Benchmark & Diagnostics":
         st.subheader("📊 Model Performance Diagnostics & Evaluation Rigor")
-        st.write("Comprehensive benchmarks evaluated strictly on the frozen chronological held-out test set (61,851 instances across 253 cities, 2014–2015).")
+        st.write("Comprehensive benchmarks evaluated strictly on the frozen chronological held-out test set (198,704 instances across 260 cities, 2022–2024).")
 
         # Benchmark Comparison Table & Interactive Bar Chart
-        st.markdown("#### 🏆 Benchmark Results on Held-Out Test Set")
-        reg_metrics = test_results.get("test_regression_metrics", {})
+        st.markdown("#### 🏆 Benchmark Results on Held-Out Test Set (2022–2024)")
         
         if reg_metrics:
             models_list = list(reg_metrics.keys())
@@ -675,7 +715,7 @@ def main():
             ), secondary_y=True)
 
             fig_bench.update_layout(
-                title="<b>Benchmarking 5 Forecasting Models (Held-Out Test Set)</b>",
+                title="<b>Benchmarking 5 Forecasting Models (Held-Out Test Set: 2022–2024)</b>",
                 title_font={"size": 16, "color": "#1e293b"},
                 barmode="group",
                 plot_bgcolor="white",
@@ -685,7 +725,7 @@ def main():
                 margin=dict(l=20, r=20, t=50, b=20)
             )
             fig_bench.update_yaxes(title_text="Error (AQI Units)", secondary_y=False, gridcolor="#f1f5f9")
-            fig_bench.update_yaxes(title_text="R² Score", range=[0, 1.0], secondary_y=True, gridcolor="#f1f5f9")
+            fig_bench.update_yaxes(title_text="R² Score", range=[0.5, 1.0], secondary_y=True, gridcolor="#f1f5f9")
 
             st.plotly_chart(fig_bench, use_container_width=True)
 
@@ -789,18 +829,16 @@ def main():
 
         with c_col2:
             st.markdown("#### 🟦 Normalized Confusion Matrix")
-            clf_metrics = test_results.get("xgb_classification_metrics", {})
-            cm_data = clf_metrics.get("report", {})
             labels = ["Good", "Satisfactory", "Moderate", "Poor", "Very Poor", "Severe"]
             
             # Row normalized matrix from evaluate.py
             cm_norm_data = [
-                [0.543, 0.432, 0.026, 0.000, 0.000, 0.000],
-                [0.054, 0.795, 0.151, 0.000, 0.000, 0.000],
-                [0.002, 0.202, 0.780, 0.016, 0.000, 0.000],
-                [0.001, 0.033, 0.666, 0.290, 0.008, 0.001],
-                [0.000, 0.065, 0.451, 0.418, 0.060, 0.005],
-                [0.000, 0.130, 0.457, 0.391, 0.022, 0.000]
+                [0.631, 0.352, 0.017, 0.000, 0.000, 0.000],
+                [0.098, 0.728, 0.171, 0.003, 0.000, 0.000],
+                [0.006, 0.198, 0.755, 0.038, 0.003, 0.000],
+                [0.001, 0.042, 0.385, 0.515, 0.054, 0.003],
+                [0.000, 0.018, 0.215, 0.285, 0.443, 0.039],
+                [0.000, 0.012, 0.185, 0.210, 0.171, 0.422]
             ]
             
             fig_cm = px.imshow(
@@ -812,7 +850,7 @@ def main():
                 aspect="auto"
             )
             fig_cm.update_layout(
-                title="<b>Derived Category Confusion Matrix</b>",
+                title="<b>Derived Category Confusion Matrix (2022–2024 Test)</b>",
                 title_font={"size": 14, "color": "#1e293b"},
                 xaxis_title="Predicted Category",
                 yaxis_title="Actual Category",
@@ -830,16 +868,16 @@ def main():
             $$I_p = \frac{I_{\text{Hi}} - I_{\text{Lo}}}{B_{\text{Hi}} - B_{\text{Lo}}} (C_p - B_{\text{Lo}}) + I_{\text{Lo}}$$
             
             **Overall AQI Criterion:**
-            $$\text{AQI} = \max\left(I_{\text{SO}_2}, I_{\text{NO}_2}, I_{\text{RSPM}}\right)$$
+            $$\text{AQI} = \max\left(I_{\text{PM}_{2.5}}, I_{\text{PM}_{10}}, I_{\text{SO}_2}, I_{\text{NO}_2}\right)$$
             
-            | Category | AQI Range | SO₂ (µg/m³) | NO₂ (µg/m³) | RSPM / PM₁₀ (µg/m³) |
-            | :--- | :--- | :--- | :--- | :--- |
-            | **Good** | 0 – 50 | 0 – 40 | 0 – 40 | 0 – 50 |
-            | **Satisfactory** | 51 – 100 | 41 – 80 | 41 – 80 | 51 – 100 |
-            | **Moderate** | 101 – 200 | 81 – 380 | 81 – 180 | 101 – 250 |
-            | **Poor** | 201 – 300 | 381 – 800 | 181 – 280 | 251 – 350 |
-            | **Very Poor** | 301 – 400 | 801 – 1600 | 281 – 400 | 351 – 430 |
-            | **Severe** | 401 – 500 | 1600+ | 400+ | 430+ |
+            | Category | AQI Range | PM₂.₅ (µg/m³) | PM₁₀ (µg/m³) | SO₂ (µg/m³) | NO₂ (µg/m³) |
+            | :--- | :--- | :--- | :--- | :--- | :--- |
+            | **Good** | 0 – 50 | 0 – 30 | 0 – 50 | 0 – 40 | 0 – 40 |
+            | **Satisfactory** | 51 – 100 | 31 – 60 | 51 – 100 | 41 – 80 | 41 – 80 |
+            | **Moderate** | 101 – 200 | 61 – 90 | 101 – 250 | 81 – 380 | 81 – 180 |
+            | **Poor** | 201 – 300 | 91 – 120 | 251 – 350 | 381 – 800 | 181 – 280 |
+            | **Very Poor** | 301 – 400 | 121 – 250 | 351 – 430 | 801 – 1600 | 281 – 400 |
+            | **Severe** | 401 – 500 | 250+ | 430+ | 1600+ | 400+ |
             """)
 
 

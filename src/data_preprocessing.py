@@ -14,7 +14,7 @@ import numpy as np
 
 RAW_DATA_PATH = os.path.join("data", "data.csv")
 
-POLLUTANT_COLUMNS = ["so2", "no2", "rspm", "spm", "pm2_5"]
+POLLUTANT_COLUMNS = ["so2", "no2", "rspm", "pm2_5", "ws", "rh", "co", "ozone", "nh3", "spm"]
 
 
 def load_data(path: str = RAW_DATA_PATH) -> pd.DataFrame:

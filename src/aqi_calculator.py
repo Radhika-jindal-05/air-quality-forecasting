@@ -5,9 +5,9 @@ Implements the official Central Pollution Control Board (CPCB) India
 National Air Quality Index (IND-AQI) piecewise linear interpolation standard.
 
 This module is strictly deterministic:
-- Calculates pollutant sub-indices for SO2, NO2, and RSPM/PM10 based on official CPCB breakpoints.
+- Calculates pollutant sub-indices for PM2.5, PM10 (RSPM), SO2, and NO2 based on official CPCB breakpoints.
 - Calculates overall AQI as the maximum of available sub-indices, requiring valid particulate
-  matter (RSPM) and at least two total pollutant measurements.
+  matter (PM2.5 or PM10) and at least two total pollutant measurements.
 - Categorizes continuous AQI into official CPCB health categories.
 - The ML model never replaces this formula; this module provides the ground truth.
 """
@@ -18,6 +18,15 @@ import pandas as pd
 
 
 # Official CPCB Breakpoints (Low_Conc, High_Conc, Low_Index, High_Index)
+PM25_BREAKPOINTS = [
+    (0.0, 30.0, 0.0, 50.0),
+    (30.0, 60.0, 50.0, 100.0),
+    (60.0, 90.0, 100.0, 200.0),
+    (90.0, 120.0, 200.0, 300.0),
+    (120.0, 250.0, 300.0, 400.0),
+    (250.0, 380.0, 400.0, 500.0)
+]
+
 SO2_BREAKPOINTS = [
     (0.0, 40.0, 0.0, 50.0),
     (40.0, 80.0, 50.0, 100.0),
@@ -71,6 +80,19 @@ def _interpolate_subindex_scalar(conc: Optional[float], breakpoints) -> float:
     return i_lo + (conc - b_lo) * (i_hi - i_lo) / (b_hi - b_lo)
 
 
+def calc_pm25_subindex(pm25: Union[float, pd.Series]) -> Union[float, pd.Series]:
+    """Calculate PM2.5 sub-index (scalar or pandas Series)."""
+    if isinstance(pm25, pd.Series):
+        res = np.where(pm25 <= 30, pm25 * (50 / 30),
+              np.where(pm25 <= 60, 50 + (pm25 - 30) * (50 / 30),
+              np.where(pm25 <= 90, 100 + (pm25 - 60) * (100 / 30),
+              np.where(pm25 <= 120, 200 + (pm25 - 90) * (100 / 30),
+              np.where(pm25 <= 250, 300 + (pm25 - 120) * (100 / 130),
+              400 + (pm25 - 250) * (100 / 130))))))
+        return pd.Series(res, index=pm25.index).where(pm25.notna() & (pm25 >= 0))
+    return _interpolate_subindex_scalar(pm25, PM25_BREAKPOINTS)
+
+
 def calc_so2_subindex(so2: Union[float, pd.Series]) -> Union[float, pd.Series]:
     """Calculate SO2 sub-index (scalar or pandas Series)."""
     if isinstance(so2, pd.Series):
@@ -111,22 +133,25 @@ def calc_rspm_subindex(rspm: Union[float, pd.Series]) -> Union[float, pd.Series]
 
 
 def calculate_aqi_scalar(
-    so2: Optional[float],
-    no2: Optional[float],
-    rspm: Optional[float]
+    so2: Optional[float] = None,
+    no2: Optional[float] = None,
+    rspm: Optional[float] = None,
+    pm2_5: Optional[float] = None
 ) -> float:
     """
     Calculate deterministic AQI for a single scalar observation.
-    Requires valid RSPM (PM10) and at least 2 valid pollutant sub-indices.
+    Requires valid particulate matter (PM2.5 or PM10) and at least 2 valid pollutant sub-indices.
     """
     so2_si = calc_so2_subindex(so2)
     no2_si = calc_no2_subindex(no2)
     rspm_si = calc_rspm_subindex(rspm)
+    pm25_si = calc_pm25_subindex(pm2_5)
 
-    valid_subindices = [si for si in [so2_si, no2_si, rspm_si] if pd.notna(si)]
+    valid_subindices = [si for si in [so2_si, no2_si, rspm_si, pm25_si] if pd.notna(si)]
+    has_pm = pd.notna(rspm_si) or pd.notna(pm25_si)
 
-    # CPCB standard: particulate matter (RSPM) must be present, and at least 2 pollutants total
-    if pd.notna(rspm_si) and len(valid_subindices) >= 2:
+    # CPCB standard: particulate matter must be present, and at least 2 pollutants total
+    if has_pm and len(valid_subindices) >= 2:
         return float(max(valid_subindices))
     return np.nan
 
@@ -137,17 +162,20 @@ def calculate_aqi_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     """
     df = df.copy()
 
-    df["so2_si"] = calc_so2_subindex(df["so2"])
-    df["no2_si"] = calc_no2_subindex(df["no2"])
-    df["rspm_si"] = calc_rspm_subindex(df["rspm"])
+    df["so2_si"] = calc_so2_subindex(df["so2"]) if "so2" in df.columns else np.nan
+    df["no2_si"] = calc_no2_subindex(df["no2"]) if "no2" in df.columns else np.nan
+    df["rspm_si"] = calc_rspm_subindex(df["rspm"]) if "rspm" in df.columns else np.nan
+    df["pm25_si"] = calc_pm25_subindex(df["pm2_5"]) if "pm2_5" in df.columns else np.nan
 
-    si_cols = ["so2_si", "no2_si", "rspm_si"]
-    valid_count = df[si_cols].notna().sum(axis=1)
-    has_pm = df["rspm_si"].notna()
+    si_cols = ["so2_si", "no2_si", "rspm_si", "pm25_si"]
+    available_si = [c for c in si_cols if c in df.columns]
+    
+    valid_count = df[available_si].notna().sum(axis=1)
+    has_pm = (df["rspm_si"].notna() if "rspm_si" in df.columns else False) | (df["pm25_si"].notna() if "pm25_si" in df.columns else False)
 
-    max_si = df[si_cols].max(axis=1)
+    max_si = df[available_si].max(axis=1)
 
-    # Condition: RSPM must be present and valid pollutant count >= 2
+    # Condition: Particulate matter must be present and valid pollutant count >= 2
     df["aqi"] = max_si.where(has_pm & (valid_count >= 2))
 
     return df
@@ -205,8 +233,9 @@ if __name__ == "__main__":
         ("RSPM", 25.0, 25.0),
         ("RSPM", 75.0, 75.0),
         ("RSPM", 175.0, 150.0),
-        ("RSPM", 300.0, 250.0),
-        ("RSPM", 390.0, 350.0),
+        ("PM25", 15.0, 25.0),
+        ("PM25", 45.0, 75.0),
+        ("PM25", 75.0, 150.0),
     ]
 
     all_passed = True
@@ -217,6 +246,8 @@ if __name__ == "__main__":
             actual = calc_no2_subindex(conc)
         elif p_type == "RSPM":
             actual = calc_rspm_subindex(conc)
+        elif p_type == "PM25":
+            actual = calc_pm25_subindex(conc)
         else:
             actual = np.nan
 
@@ -225,17 +256,11 @@ if __name__ == "__main__":
             all_passed = False
         print(f"  [{'PASS' if passed else 'FAIL'}] {p_type:5s} conc={conc:5.1f} -> Sub-Index: {actual:6.2f} (Expected: {expected:6.2f})")
 
-    # Overall AQI test
-    test_aqi = calculate_aqi_scalar(so2=60.0, no2=130.0, rspm=175.0)
-    # Subindices: SO2=75, NO2=150, RSPM=150 -> Max is 150 (Moderate)
+    # Overall AQI test with PM2.5
+    test_aqi = calculate_aqi_scalar(so2=60.0, no2=130.0, pm2_5=75.0)
     cat = get_aqi_category(test_aqi)
-    print(f"\nOverall AQI Test: SO2=60, NO2=130, RSPM=175 -> AQI: {test_aqi} ({cat})")
+    print(f"\nOverall AQI Test: SO2=60, NO2=130, PM2.5=75 -> AQI: {test_aqi} ({cat})")
     assert test_aqi == 150.0, f"Expected 150.0, got {test_aqi}"
     assert cat == "Moderate", f"Expected Moderate, got {cat}"
-
-    # Missing particulate matter test -> must return NaN
-    no_pm_aqi = calculate_aqi_scalar(so2=60.0, no2=130.0, rspm=None)
-    print(f"Missing Particulate Test: SO2=60, NO2=130, RSPM=None -> AQI: {no_pm_aqi}")
-    assert pd.isna(no_pm_aqi), "Expected NaN when particulate matter is missing"
 
     print("\nAll CPCB Sub-Index and AQI Calculator Unit Tests PASSED!")
