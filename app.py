@@ -20,18 +20,35 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-# Ensure repository root is on sys.path
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+# Ensure repository root and src directory are on sys.path
+repo_root = os.path.abspath(os.path.dirname(__file__))
+if repo_root not in sys.path:
+    sys.path.insert(0, repo_root)
 
-from src.aqi_calculator import (
-    calculate_aqi_scalar,
-    get_aqi_category,
-    calc_so2_subindex,
-    calc_no2_subindex,
-    calc_rspm_subindex,
-    calc_pm25_subindex
-)
-from src.feature_engineering import FEATURE_COLUMNS
+src_dir = os.path.join(repo_root, "src")
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
+
+try:
+    from src.aqi_calculator import (
+        calculate_aqi_scalar,
+        get_aqi_category,
+        calc_so2_subindex,
+        calc_no2_subindex,
+        calc_rspm_subindex,
+        calc_pm25_subindex
+    )
+    from src.feature_engineering import FEATURE_COLUMNS
+except ImportError:
+    from aqi_calculator import (
+        calculate_aqi_scalar,
+        get_aqi_category,
+        calc_so2_subindex,
+        calc_no2_subindex,
+        calc_rspm_subindex,
+        calc_pm25_subindex
+    )
+    from feature_engineering import FEATURE_COLUMNS
 
 # Page configuration
 st.set_page_config(
