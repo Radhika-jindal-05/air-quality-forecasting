@@ -155,12 +155,32 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+def _get_artifact_mtimes():
+    """Get modification timestamps of artifact files to invalidate cache when files update."""
+    paths = [
+        os.path.join(repo_root, "models", "xgboost_model.pkl"),
+        os.path.join(repo_root, "models", "test_evaluation_results.json"),
+        os.path.join(repo_root, "models", "error_analysis.json"),
+    ]
+    return tuple(os.path.getmtime(p) if os.path.exists(p) else 0 for p in paths)
+
+
+def _get_data_mtimes():
+    """Get modification timestamps of data files to invalidate cache when files update."""
+    paths = [
+        os.path.join(repo_root, "data", "city_snapshots.parquet"),
+        os.path.join(repo_root, "data", "city_snapshots.csv.gz"),
+        os.path.join(repo_root, "data", "data.csv"),
+    ]
+    return tuple(os.path.getmtime(p) if os.path.exists(p) else 0 for p in paths)
+
+
 @st.cache_resource
-def load_artifacts():
-    """Load model bundle and test evaluation metrics."""
-    model_path = os.path.join("models", "xgboost_model.pkl")
-    results_path = os.path.join("models", "test_evaluation_results.json")
-    error_analysis_path = os.path.join("models", "error_analysis.json")
+def load_artifacts(_cache_key=None):
+    """Load model bundle and test evaluation metrics using repo_root absolute paths."""
+    model_path = os.path.join(repo_root, "models", "xgboost_model.pkl")
+    results_path = os.path.join(repo_root, "models", "test_evaluation_results.json")
+    error_analysis_path = os.path.join(repo_root, "models", "error_analysis.json")
 
     if not os.path.exists(model_path):
         st.error(f"Trained model not found at '{model_path}'. Please run 'python src/train.py' first.")
@@ -170,22 +190,22 @@ def load_artifacts():
 
     test_results = {}
     if os.path.exists(results_path):
-        with open(results_path, "r") as f:
+        with open(results_path, "r", encoding="utf-8") as f:
             test_results = json.load(f)
 
     error_analysis = {}
     if os.path.exists(error_analysis_path):
-        with open(error_analysis_path, "r") as f:
+        with open(error_analysis_path, "r", encoding="utf-8") as f:
             error_analysis = json.load(f)
 
     return artifact, test_results, error_analysis
 
 
 @st.cache_data
-def load_city_historical_summary():
+def load_city_historical_summary(_cache_key=None):
     """Load latest records per city for historical forecasting tab."""
-    snapshot_parquet = os.path.join("data", "city_snapshots.parquet")
-    snapshot_csv_gz = os.path.join("data", "city_snapshots.csv.gz")
+    snapshot_parquet = os.path.join(repo_root, "data", "city_snapshots.parquet")
+    snapshot_csv_gz = os.path.join(repo_root, "data", "city_snapshots.csv.gz")
     
     if os.path.exists(snapshot_parquet):
         df = pd.read_parquet(snapshot_parquet)
@@ -377,7 +397,7 @@ def create_subindex_breakdown_plot(pm25_si: float, rspm_si: float, so2_si: float
 
 
 def main():
-    artifact, test_results, error_analysis = load_artifacts()
+    artifact, test_results, error_analysis = load_artifacts(_get_artifact_mtimes())
     model = artifact["model"]
     train_medians = artifact["train_medians"]
     supported_cities = artifact.get("supported_cities", [])
@@ -458,7 +478,7 @@ def main():
         st.write("Explore continuous historical monitoring timelines across 260+ Indian cities and generate next-period forecasts.")
 
         with st.spinner("Loading city historical observations..."):
-            model_df = load_city_historical_summary()
+            model_df = load_city_historical_summary(_get_data_mtimes())
 
         available_cities = sorted([c for c in supported_cities if c in model_df["location"].unique()])
         if not available_cities:
