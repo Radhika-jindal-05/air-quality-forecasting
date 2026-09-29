@@ -365,6 +365,14 @@ def main():
     train_medians = artifact["train_medians"]
     supported_cities = artifact.get("supported_cities", [])
     
+    # Safely extract expected model features avoiding NumPy array truth-value ambiguity
+    if hasattr(model, "feature_names_in_") and model.feature_names_in_ is not None:
+        expected_cols = list(model.feature_names_in_)
+    elif hasattr(model, "get_booster") and model.get_booster().feature_names is not None:
+        expected_cols = list(model.get_booster().feature_names)
+    else:
+        expected_cols = list(FEATURE_COLUMNS)
+
     reg_metrics = test_results.get("test_regression_metrics", {})
     xgb_metrics = reg_metrics.get("XGBoost Regressor", {})
     test_rmse = xgb_metrics.get("RMSE", 39.67)
@@ -454,7 +462,6 @@ def main():
         curr_cat = get_aqi_category(curr_aqi)
 
         # Prepare feature vector for latest row with robust alignment
-        expected_cols = getattr(model, "feature_names_in_", None) or getattr(model.get_booster(), "feature_names", FEATURE_COLUMNS)
         X_row = pd.DataFrame([latest_row]).reindex(columns=expected_cols)
         if train_medians is not None:
             X_row = X_row.fillna(train_medians)
