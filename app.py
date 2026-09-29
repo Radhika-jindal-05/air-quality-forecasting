@@ -1,5 +1,5 @@
 """
-Streamlit Web Application: Air Quality Forecasting using XGBoost.
+Air Quality Forecasting using XGBoost - Production Streamlit Application.
 
 An interactive, responsive dashboard for:
 1. Deterministic calculation of current AQI via official CPCB piecewise breakpoints (PM2.5, PM10, SO2, NO2).
@@ -61,16 +61,17 @@ st.set_page_config(
 # Custom CSS for polished, responsive, and modern dashboard styling
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     
     html, body, [class*="css"] {
         font-family: 'Inter', sans-serif;
     }
     
     .main-header {
-        font-size: 2.3rem;
+        font-size: 2.35rem;
         font-weight: 800;
-        background: linear-gradient(90deg, #1e3a8a, #0284c7);
+        letter-spacing: -0.02em;
+        background: linear-gradient(90deg, #1e3a8a, #0284c7, #0d9488);
         -webkit-background-clip: text;
         -webkit-text-fill-color: transparent;
         margin-bottom: 0.2rem;
@@ -81,52 +82,55 @@ st.markdown("""
         margin-bottom: 1.2rem;
     }
     .stat-card {
-        background: linear-gradient(135deg, #ffffff, #f8fafc);
+        background: #ffffff;
         border: 1px solid #e2e8f0;
-        border-radius: 12px;
-        padding: 1.1rem;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+        border-radius: 14px;
+        padding: 1.2rem;
+        box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
         text-align: center;
-        transition: transform 0.2s ease;
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
     .stat-card:hover {
-        transform: translateY(-2px);
+        transform: translateY(-3px);
+        box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08);
     }
     .stat-number {
-        font-size: 1.8rem;
+        font-size: 1.85rem;
         font-weight: 800;
         color: #0f172a;
     }
     .stat-label {
-        font-size: 0.85rem;
-        font-weight: 600;
+        font-size: 0.8rem;
+        font-weight: 700;
         color: #64748b;
         text-transform: uppercase;
-        letter-spacing: 0.05em;
+        letter-spacing: 0.06em;
+        margin-top: 0.2rem;
     }
     .aqi-badge {
         display: inline-block;
-        padding: 0.4rem 0.9rem;
+        padding: 0.4rem 0.95rem;
         border-radius: 8px;
         font-weight: 700;
         font-size: 1.15rem;
         color: white;
         letter-spacing: 0.02em;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        box-shadow: 0 2px 5px rgba(0,0,0,0.12);
     }
-    .badge-good { background-color: #22c55e; }
+    .badge-good { background-color: #22c55e; color: white; }
     .badge-satisfactory { background-color: #84cc16; color: #1e293b; }
     .badge-moderate { background-color: #eab308; color: #1e293b; }
-    .badge-poor { background-color: #f97316; }
-    .badge-very-poor { background-color: #ef4444; }
-    .badge-severe { background-color: #991b1b; }
+    .badge-poor { background-color: #f97316; color: white; }
+    .badge-very-poor { background-color: #ef4444; color: white; }
+    .badge-severe { background-color: #991b1b; color: white; }
     
     .health-card {
         border-radius: 12px;
-        padding: 1rem 1.2rem;
+        padding: 1.1rem 1.3rem;
         margin-top: 0.8rem;
         font-size: 0.95rem;
         line-height: 1.5;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.03);
     }
     .health-good { background-color: #f0fdf4; border-left: 5px solid #22c55e; color: #166534; }
     .health-satisfactory { background-color: #f7fee7; border-left: 5px solid #84cc16; color: #3f6212; }
@@ -134,6 +138,19 @@ st.markdown("""
     .health-poor { background-color: #fff7ed; border-left: 5px solid #f97316; color: #9a3412; }
     .health-very-poor { background-color: #fef2f2; border-left: 5px solid #ef4444; color: #991b1b; }
     .health-severe { background-color: #450a0a; border-left: 5px solid #991b1b; color: #fecaca; }
+
+    .cpcb-legend-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 10px 0 15px 0;
+    }
+    .legend-pill {
+        padding: 4px 10px;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -200,12 +217,12 @@ def get_badge_html(category: str) -> str:
 def get_health_advisory(category: str) -> str:
     """Return official CPCB health statement for each AQI bucket."""
     advisories = {
-        "Good": ("health-good", "🌿 Minimal impact. Air quality is ideal for all outdoor activities and physical exercise."),
-        "Satisfactory": ("health-satisfactory", "🍃 Minor breathing discomfort may occur to sensitive individuals (asthma patients / elderly)."),
-        "Moderate": ("health-moderate", "⚠️ Breathing discomfort to people with lungs, asthma and heart diseases. Children and elderly should limit prolonged exertion."),
-        "Poor": ("health-poor", "😷 Breathing discomfort to most people on prolonged exposure. Sensitive groups should avoid outdoor exertion and wear N95 masks."),
-        "Very Poor": ("health-very-poor", "🚨 Respiratory illness on prolonged exposure. High risk of cardiovascular and lung aggravation. Limit outdoor activity strictly."),
-        "Severe": ("health-severe", "🛑 Health emergency. Affects healthy people and seriously impacts those with existing diseases. Close outdoor activities immediately.")
+        "Good": ("health-good", "🌿 <b>Minimal impact.</b> Air quality is clean and healthy for all outdoor activities and physical exercise."),
+        "Satisfactory": ("health-satisfactory", "🍃 <b>Minor impact.</b> Minor breathing discomfort may occur to sensitive individuals (asthma patients / elderly)."),
+        "Moderate": ("health-moderate", "⚠️ <b>Moderate risk.</b> Breathing discomfort to people with lungs, asthma and heart diseases. Children and elderly should limit prolonged exertion."),
+        "Poor": ("health-poor", "😷 <b>Unhealthy air.</b> Breathing discomfort to most people on prolonged exposure. Sensitive groups should avoid outdoor exertion and wear N95 masks."),
+        "Very Poor": ("health-very-poor", "🚨 <b>Hazardous air.</b> Respiratory illness on prolonged exposure. High risk of cardiovascular and lung aggravation. Limit outdoor activity strictly."),
+        "Severe": ("health-severe", "🛑 <b>Health Emergency.</b> Affects healthy people and seriously impacts those with existing diseases. Close outdoor activities immediately.")
     }
     css_class, msg = advisories.get(category, ("health-moderate", "Air quality parameters are moderate."))
     return f'<div class="health-card {css_class}"><strong>Health Advisory:</strong> {msg}</div>'
@@ -216,7 +233,7 @@ def create_aqi_gauge(aqi_val: float, title: str) -> go.Figure:
     fig = go.Figure(go.Indicator(
         mode="gauge+number",
         value=min(max(aqi_val, 0), 500),
-        title={"text": f"<b>{title}</b>", "font": {"size": 17, "color": "#1e293b"}},
+        title={"text": f"<b>{title}</b>", "font": {"size": 17, "color": "#1e293b", "family": "Inter"}},
         number={"font": {"size": 36, "color": "#0f172a", "family": "Inter"}, "suffix": ""},
         gauge={
             "axis": {"range": [0, 500], "tickwidth": 1, "tickcolor": "#94a3b8", "tickvals": [0, 50, 100, 200, 300, 400, 500]},
@@ -233,8 +250,8 @@ def create_aqi_gauge(aqi_val: float, title: str) -> go.Figure:
                 {"range": [400, 500], "color": "#991b1b"},
             ],
             "threshold": {
-                "line": {"color": "black", "width": 4},
-                "thickness": 0.8,
+                "line": {"color": "#0f172a", "width": 4},
+                "thickness": 0.85,
                 "value": aqi_val
             }
         }
@@ -256,12 +273,12 @@ def create_city_timeline_plot(city_df: pd.DataFrame, pred_next_aqi: float, selec
     fig = go.Figure()
 
     # Category shaded background bands
-    fig.add_hrect(y0=0, y1=50, fillcolor="#22c55e", opacity=0.08, line_width=0, annotation_text="Good", annotation_position="top left")
-    fig.add_hrect(y0=50, y1=100, fillcolor="#84cc16", opacity=0.08, line_width=0, annotation_text="Satisfactory", annotation_position="top left")
-    fig.add_hrect(y0=100, y1=200, fillcolor="#eab308", opacity=0.08, line_width=0, annotation_text="Moderate", annotation_position="top left")
-    fig.add_hrect(y0=200, y1=300, fillcolor="#f97316", opacity=0.08, line_width=0, annotation_text="Poor", annotation_position="top left")
-    fig.add_hrect(y0=300, y1=400, fillcolor="#ef4444", opacity=0.08, line_width=0, annotation_text="Very Poor", annotation_position="top left")
-    fig.add_hrect(y0=400, y1=500, fillcolor="#991b1b", opacity=0.08, line_width=0, annotation_text="Severe", annotation_position="top left")
+    fig.add_hrect(y0=0, y1=50, fillcolor="#22c55e", opacity=0.08, line_width=0, annotation_text="Good (0-50)", annotation_position="top left")
+    fig.add_hrect(y0=50, y1=100, fillcolor="#84cc16", opacity=0.08, line_width=0, annotation_text="Satisfactory (51-100)", annotation_position="top left")
+    fig.add_hrect(y0=100, y1=200, fillcolor="#eab308", opacity=0.08, line_width=0, annotation_text="Moderate (101-200)", annotation_position="top left")
+    fig.add_hrect(y0=200, y1=300, fillcolor="#f97316", opacity=0.08, line_width=0, annotation_text="Poor (201-300)", annotation_position="top left")
+    fig.add_hrect(y0=300, y1=400, fillcolor="#ef4444", opacity=0.08, line_width=0, annotation_text="Very Poor (301-400)", annotation_position="top left")
+    fig.add_hrect(y0=400, y1=500, fillcolor="#991b1b", opacity=0.08, line_width=0, annotation_text="Severe (401-500)", annotation_position="top left")
 
     # Historical Observed AQI Line
     fig.add_trace(go.Scatter(
@@ -293,7 +310,7 @@ def create_city_timeline_plot(city_df: pd.DataFrame, pred_next_aqi: float, selec
         x=[forecast_date],
         y=[pred_next_aqi],
         mode="markers",
-        name="🔮 XGBoost Next-Period Forecast",
+        name="🔮 XGBoost Forecast (t+1)",
         marker=dict(size=14, color="#f43f5e", symbol="star", line=dict(width=2, color="#881337")),
         hovertemplate="<b>Next-Period Forecast:</b> %{y:.1f}<br><b>Horizon:</b> $\le 7$ Days<extra></extra>"
     ))
@@ -303,15 +320,15 @@ def create_city_timeline_plot(city_df: pd.DataFrame, pred_next_aqi: float, selec
         x=[forecast_date, forecast_date],
         y=[max(0, pred_next_aqi - test_rmse), min(500, pred_next_aqi + test_rmse)],
         mode="lines",
-        name=f"±1 RMSE Uncertainty (±{test_rmse:.1f})",
+        name=f"±1 RMSE Bound (±{test_rmse:.1f})",
         line=dict(color="#fb7185", width=4),
         hoverinfo="skip"
     ))
 
     fig.update_layout(
-        title=f"<b>Historical AQI Progression & Next-Period Forecast for {selected_city}</b>",
-        title_font={"size": 17, "color": "#1e293b"},
-        xaxis_title="Date",
+        title=f"<b>Historical AQI Progression & 1-Step Horizon Forecast for {selected_city}</b>",
+        title_font={"size": 17, "color": "#1e293b", "family": "Inter"},
+        xaxis_title="Observation Date",
         yaxis_title="Air Quality Index (AQI)",
         yaxis=dict(range=[0, max(plot_df["aqi"].max() + 50, pred_next_aqi + 60, 220)], gridcolor="#f1f5f9"),
         xaxis=dict(gridcolor="#f1f5f9"),
@@ -348,7 +365,7 @@ def create_subindex_breakdown_plot(pm25_si: float, rspm_si: float, so2_si: float
     
     fig.update_layout(
         title="<b>Pollutant Sub-Index Breakdown (Deterministic CPCB IND-AQI)</b>",
-        title_font={"size": 15, "color": "#1e293b"},
+        title_font={"size": 15, "color": "#1e293b", "family": "Inter"},
         yaxis_title="Sub-Index Value",
         plot_bgcolor="white",
         paper_bgcolor="rgba(0,0,0,0)",
@@ -379,24 +396,20 @@ def main():
     test_r2 = xgb_metrics.get("R2", 0.7751)
     
     clf_metrics = test_results.get("xgb_classification_metrics", {})
-    test_acc = clf_metrics.get("accuracy", 0.6837) * 100
     test_macro_f1 = clf_metrics.get("macro_f1", 0.6072)
 
-    # Sidebar Navigation & Context
-    st.sidebar.markdown("## 🌤️ Navigation")
-    app_mode = st.sidebar.radio(
-        "Select Section:",
-        ["🏙️ City Historical Forecast", "🧪 Custom Scenario Simulation", "📊 Model Benchmark & Diagnostics"]
-    )
-
+    # Sidebar: Clean Branding & Context
+    st.sidebar.markdown("## 🌤️ Air Quality ML")
+    st.sidebar.caption("Deterministic CPCB Ground Truth + XGBoost Temporal Forecasting")
+    
     st.sidebar.markdown("---")
-    st.sidebar.markdown("### 🏆 Core Model Performance (2022–2024 Test)")
+    st.sidebar.markdown("### 🏆 Core Model Performance")
     st.sidebar.markdown(
         f"""
         - **XGBoost Test RMSE:** `{test_rmse:.2f}` (vs Persistence `44.13`)
-        - **R² Score:** `{test_r2:.4f}` ({test_r2*100:.1f}% variance captured)
+        - **Test R² Score:** `{test_r2:.4f}` ({test_r2*100:.1f}% variance)
         - **Macro F1 Score:** `{test_macro_f1:.4f}`
-        - **Test Dataset:** 198,704 unseen future instances (260 cities)
+        - **Test Instances:** 198,704 (2022–2024 held-out)
         """
     )
 
@@ -407,9 +420,15 @@ def main():
         "**2. Machine Learning Forecasting:** XGBoost forecasts the **Next-Period AQI** ($\le 7$ days) from causal lag, rolling volatility, and meteorological features."
     )
 
-    # Top Title
+    st.sidebar.markdown("---")
+    st.sidebar.markdown(
+        "🔗 **[GitHub Repository](https://github.com/Radhika-jindal-05/air-quality-forecasting)**  \n"
+        "👤 **Author:** Radhika Jindal"
+    )
+
+    # Top Title & Subtitle
     st.markdown('<div class="main-header">Air Quality Forecasting using XGBoost</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">Multi-pollutant temporal forecasting pipeline trained on 2009–2024 CAAQMS continuous monitoring data (CPCB IND-AQI Standard)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">Multi-pollutant temporal forecasting pipeline trained on 2009–2024 CAAQMS continuous monitoring data across 260+ Indian cities</div>', unsafe_allow_html=True)
 
     # Top KPI Banner
     k1, k2, k3, k4 = st.columns(4)
@@ -424,11 +443,18 @@ def main():
 
     st.markdown("<br>", unsafe_allow_html=True)
 
+    # App Navigation via Modern Tabs
+    tab1, tab2, tab3 = st.tabs([
+        "🏙️ City Historical Forecast",
+        "🧪 Custom Scenario Simulation",
+        "📊 Model Benchmark & Diagnostics"
+    ])
+
     # =========================================================================
     # TAB 1: City Historical Forecast
     # =========================================================================
-    if app_mode == "🏙️ City Historical Forecast":
-        st.subheader("🏙️ City Historical Replay & Next-Period Forecast")
+    with tab1:
+        st.markdown("### 🏙️ City Historical Replay & Next-Period Forecast")
         st.write("Explore continuous historical monitoring timelines across 260+ Indian cities and generate next-period forecasts.")
 
         with st.spinner("Loading city historical observations..."):
@@ -510,8 +536,8 @@ def main():
     # =========================================================================
     # TAB 2: Custom Scenario Simulation
     # =========================================================================
-    elif app_mode == "🧪 Custom Scenario Simulation":
-        st.subheader("🧪 Real-Time Custom Scenario Forecaster")
+    with tab2:
+        st.markdown("### 🧪 Real-Time Custom Scenario Forecaster")
         st.write("Input current pollutant measurements, temporal context, and recent lag history to simulate both the deterministic ground-truth AQI and the ML forecast.")
 
         # Preset Scenarios
@@ -704,8 +730,8 @@ def main():
     # =========================================================================
     # TAB 3: Model Diagnostics & Methodology
     # =========================================================================
-    elif app_mode == "📊 Model Benchmark & Diagnostics":
-        st.subheader("📊 Model Performance Diagnostics & Evaluation Rigor")
+    with tab3:
+        st.markdown("### 📊 Model Performance Diagnostics & Evaluation Rigor")
         st.write("Comprehensive benchmarks evaluated strictly on the frozen chronological held-out test set (198,704 instances across 260 cities, 2022–2024).")
 
         # Benchmark Comparison Table & Interactive Bar Chart
@@ -749,7 +775,7 @@ def main():
 
             fig_bench.update_layout(
                 title="<b>Benchmarking 5 Forecasting Models (Held-Out Test Set: 2022–2024)</b>",
-                title_font={"size": 16, "color": "#1e293b"},
+                title_font={"size": 16, "color": "#1e293b", "family": "Inter"},
                 barmode="group",
                 plot_bgcolor="white",
                 paper_bgcolor="rgba(0,0,0,0)",
@@ -793,7 +819,7 @@ def main():
                 ))
                 fig_fi.update_layout(
                     title="<b>XGBoost Feature Importance (%)</b>",
-                    title_font={"size": 14, "color": "#1e293b"},
+                    title_font={"size": 14, "color": "#1e293b", "family": "Inter"},
                     xaxis_title="Relative Importance (%)",
                     plot_bgcolor="white",
                     paper_bgcolor="rgba(0,0,0,0)",
@@ -819,7 +845,7 @@ def main():
                 ))
                 fig_gap.update_layout(
                     title="<b>RMSE across Observation Horizons</b>",
-                    title_font={"size": 14, "color": "#1e293b"},
+                    title_font={"size": 14, "color": "#1e293b", "family": "Inter"},
                     yaxis_title="RMSE (AQI Units)",
                     plot_bgcolor="white",
                     paper_bgcolor="rgba(0,0,0,0)",
@@ -850,7 +876,7 @@ def main():
                 ))
                 fig_cat.update_layout(
                     title="<b>MAE per CPCB Health Category</b>",
-                    title_font={"size": 14, "color": "#1e293b"},
+                    title_font={"size": 14, "color": "#1e293b", "family": "Inter"},
                     yaxis_title="Mean Absolute Error (AQI Units)",
                     plot_bgcolor="white",
                     paper_bgcolor="rgba(0,0,0,0)",
@@ -884,7 +910,7 @@ def main():
             )
             fig_cm.update_layout(
                 title="<b>Derived Category Confusion Matrix (2022–2024 Test)</b>",
-                title_font={"size": 14, "color": "#1e293b"},
+                title_font={"size": 14, "color": "#1e293b", "family": "Inter"},
                 xaxis_title="Predicted Category",
                 yaxis_title="Actual Category",
                 height=360,
