@@ -453,8 +453,12 @@ def main():
         curr_aqi = latest_row["aqi"]
         curr_cat = get_aqi_category(curr_aqi)
 
-        # Prepare feature vector for latest row
-        X_latest = pd.DataFrame([latest_row[FEATURE_COLUMNS]]).fillna(train_medians)
+        # Prepare feature vector for latest row with robust alignment
+        expected_cols = getattr(model, "feature_names_in_", None) or getattr(model.get_booster(), "feature_names", FEATURE_COLUMNS)
+        X_row = pd.DataFrame([latest_row]).reindex(columns=expected_cols)
+        if train_medians is not None:
+            X_row = X_row.fillna(train_medians)
+        X_latest = X_row.astype(float)
         pred_next_aqi = float(model.predict(X_latest)[0])
         pred_cat = get_aqi_category(pred_next_aqi)
 
@@ -666,7 +670,10 @@ def main():
                 "quarter": in_quarter
             }
 
-            input_row = pd.DataFrame([feature_dict])[FEATURE_COLUMNS].fillna(train_medians)
+            input_row = pd.DataFrame([feature_dict]).reindex(columns=expected_cols)
+            if train_medians is not None:
+                input_row = input_row.fillna(train_medians)
+            input_row = input_row.astype(float)
             pred_aqi = float(model.predict(input_row)[0])
             pred_cat = get_aqi_category(pred_aqi)
 
