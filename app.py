@@ -251,6 +251,7 @@ def create_aqi_gauge(aqi_val: float, title: str) -> go.Figure:
 def create_city_timeline_plot(city_df: pd.DataFrame, pred_next_aqi: float, selected_city: str, test_rmse: float = 39.67) -> go.Figure:
     """Interactive timeline plot showing historical AQI, CPCB bands, and future forecast point."""
     plot_df = city_df.tail(60).copy()
+    plot_df["date"] = pd.to_datetime(plot_df["date"])
     
     fig = go.Figure()
 
@@ -274,8 +275,8 @@ def create_city_timeline_plot(city_df: pd.DataFrame, pred_next_aqi: float, selec
     ))
 
     # Connection line to forecast
-    latest_date = plot_df["date"].iloc[-1]
-    latest_aqi = plot_df["aqi"].iloc[-1]
+    latest_date = pd.to_datetime(plot_df["date"].iloc[-1])
+    latest_aqi = float(plot_df["aqi"].iloc[-1])
     forecast_date = latest_date + pd.Timedelta(days=1)
     
     fig.add_trace(go.Scatter(
@@ -439,13 +440,14 @@ def main():
             st.caption(f"Showing validated continuous records for **{selected_city}**.")
 
         city_df = model_df[model_df["location"] == selected_city].sort_values("date").reset_index(drop=True)
+        city_df["date"] = pd.to_datetime(city_df["date"])
 
         if len(city_df) < 5:
             st.warning(f"City '{selected_city}' has limited records ({len(city_df)}).")
 
         # Latest observation
         latest_row = city_df.iloc[-1]
-        latest_date = latest_row["date"].strftime("%Y-%m-%d")
+        latest_date = pd.to_datetime(latest_row["date"]).strftime("%Y-%m-%d")
 
         # Current AQI vs Next-Period Forecast
         curr_aqi = latest_row["aqi"]
